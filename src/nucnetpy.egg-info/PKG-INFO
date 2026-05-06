@@ -1,3 +1,23 @@
+Metadata-Version: 2.4
+Name: nucnetpy
+Version: 1.0.0a5
+Summary: Pure-Python replacement package for NucNet Tools workflows
+Author: Converted with ChatGPT
+License: Research/educational conversion; check original NucNet Tools license before redistribution.
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.22
+Requires-Dist: scipy>=1.9
+Provides-Extra: hdf5
+Requires-Dist: h5py>=3.8; extra == "hdf5"
+Provides-Extra: solver
+Requires-Dist: scipy>=1.9; extra == "solver"
+Provides-Extra: plot
+Requires-Dist: matplotlib>=3.6; extra == "plot"
+Requires-Dist: networkx>=2.8; extra == "plot"
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"
+
 # nucnetpy pure-Python replacement alpha
 
 This package is a **pure-Python conversion path** for the uploaded NucNet Tools C++ project. It does **not** wrap or call the original C++ code.

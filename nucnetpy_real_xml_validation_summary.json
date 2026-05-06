@@ -1,0 +1,99 @@
+{
+  "input_database": {
+    "species": 8136,
+    "reactions": 81758,
+    "zones": 1,
+    "missing_species": 0,
+    "invalid_reactions": 0,
+    "load_seconds": 15.131
+  },
+  "initial_zone": {
+    "abundance_count": 47,
+    "xsum": 1.0,
+    "ysum": 0.7814645329200833,
+    "Ye": 0.8559863592831524,
+    "T9": 0.2,
+    "rho": 15000.0,
+    "optional_properties": {
+      "rho_0": "1.5e4",
+      "dt": "1.e-15",
+      "tau": "0.2",
+      "steps": "2",
+      "t9_0": "0.20",
+      "munuekT": "-inf",
+      "tend": "100"
+    }
+  },
+  "nova_output": {
+    "species": 480,
+    "reactions": 3089,
+    "zones": 344,
+    "zone0_abundance_count": 83,
+    "zone0_xsum": 1.0,
+    "zone0_T9": 0.19999999999999968,
+    "zone0_rho": 14999.999999999925,
+    "load_seconds": 2.637
+  },
+  "sample_rates_T9_0p2": [
+    {
+      "reaction": "gamma + zr85 -> he4 + sr81",
+      "rate": 1.7381911403882186e-149,
+      "fits": 1,
+      "constant_rate": null
+    },
+    {
+      "reaction": "n + p45 -> gamma + p46",
+      "rate": 12.176234895406198,
+      "fits": 1,
+      "constant_rate": null
+    },
+    {
+      "reaction": "he4 + tb151 -> ho154 + n",
+      "rate": 2.69686221198e-312,
+      "fits": 1,
+      "constant_rate": null
+    },
+    {
+      "reaction": "h1 + hg181 -> au178 + he4",
+      "rate": 2.632329061487351e-59,
+      "fits": 1,
+      "constant_rate": null
+    },
+    {
+      "reaction": "h1 + pb269 -> bi269 + n",
+      "rate": 2.3350018886266922e-62,
+      "fits": 1,
+      "constant_rate": null
+    },
+    {
+      "reaction": "rf310 -> antineutrinoe + db310 + electron",
+      "rate": 2.03242,
+      "fits": 0,
+      "constant_rate": 2.03242
+    },
+    {
+      "reaction": "as106 + gamma -> as105 + n",
+      "rate": 9858779.57716303,
+      "fits": 1,
+      "constant_rate": null
+    },
+    {
+      "reaction": "gamma + sb123 -> he4 + in119",
+      "rate": 1.9358403907266106e-225,
+      "fits": 1,
+      "constant_rate": null
+    },
+    {
+      "reaction": "tb203 -> antineutrinoe + dy201 + electron + n + n",
+      "rate": 2.29387,
+      "fits": 0,
+      "constant_rate": 2.29387
+    },
+    {
+      "reaction": "hs338 -> antineutrinoe + electron + mt336 + n + n",
+      "rate": 5.22111,
+      "fits": 0,
+      "constant_rate": 5.22111
+    }
+  ]
+}

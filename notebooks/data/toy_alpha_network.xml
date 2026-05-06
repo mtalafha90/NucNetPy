@@ -1,0 +1,38 @@
+<?xml version='1.0' encoding='utf-8'?>
+<nucnetpy>
+  <nuclides>
+    <nuclide name="he4" z="2" a="4" mass_excess="0.0" />
+    <nuclide name="be8" z="4" a="8" mass_excess="0.0" />
+    <nuclide name="c12" z="6" a="12" mass_excess="0.0" />
+  </nuclides>
+  <reactions>
+    <reaction label="toy_2alpha_to_be8" q_value="0.092" constant_rate="1.9999999999999999e-06">
+      <reactants>
+        <nuc name="he4" count="2" />
+      </reactants>
+      <products>
+        <nuc name="be8" count="1" />
+      </products>
+    </reaction>
+    <reaction label="toy_be8_alpha_to_c12" q_value="7.367" constant_rate="5.0000000000000002e-05">
+      <reactants>
+        <nuc name="be8" count="1" />
+        <nuc name="he4" count="1" />
+      </reactants>
+      <products>
+        <nuc name="c12" count="1" />
+      </products>
+    </reaction>
+  </reactions>
+  <zones>
+    <zone label1="toy" label2="0" label3="0">
+      <property name="t9">1.0</property>
+      <property name="rho">1e4</property>
+      <abundances>
+        <abundance name="be8" y="0" />
+        <abundance name="c12" y="0" />
+        <abundance name="he4" y="0.25" />
+      </abundances>
+    </zone>
+  </zones>
+</nucnetpy>

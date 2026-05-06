@@ -1,0 +1,8 @@
+# parent be8 daughter li8 label toy_be8_to_li8
+# t9 rhoYe rate nu_loss
+0.5 1e4 1e-5 1e-7
+0.5 1e6 2e-5 2e-7
+1.0 1e4 3e-5 3e-7
+1.0 1e6 6e-5 6e-7
+2.0 1e4 1e-4 1e-6
+2.0 1e6 2e-4 2e-6
