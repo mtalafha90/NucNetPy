@@ -17,7 +17,7 @@ from typing import Dict, Mapping, Optional, Sequence, Tuple
 import math
 import numpy as np
 
-from .constants import AVOGADRO, KB_MEV, HBAR_C_MEV_FM, AMU_G
+from .constants import AVOGADRO, KB_MEV, HBAR_C_MEV_FM, AMU_MEV
 from .core import Network, Zone
 from .species import Species, normalize_species_name
 
@@ -44,18 +44,32 @@ def nse_prefactor(sp: Species, t9: float, rho: float, include_partition: bool = 
     potential parameters in the internal solver.  The mass excess term is
     included with the sign convention common in NSE abundance formulas.
     """
+    return math.exp(min(_log_prefactor(sp, t9, rho, include_partition), 700.0))
+
+
+def _log_prefactor(sp: Species, t9: float, rho: float, include_partition: bool = True) -> float:
+    """Natural log of :func:`nse_prefactor`, computed without overflow.
+
+    Working in log space keeps the iron-peak prefactors (which span tens of
+    orders of magnitude) representable and lets the solver use a numerically
+    stable log-sum-exp for the abundance moments.
+    """
     t9 = max(float(t9), 1e-30)
     rho = max(float(rho), 1e-300)
-    kt = KB_MEV * t9 * 1.0e9
+    kt = KB_MEV * t9 * 1.0e9  # kT in MeV
     a = max(int(sp.a), 1)
     g = _partition(sp, t9) if include_partition else 1.0
-    # Translational factor in cgs.  This compact form is used for numerical
-    # replacement workflows; use identical constants/masses for strict regression.
-    theta = ((AMU_G * kt) / (2.0 * math.pi * (_HBAR_C_MEV_CM ** 2))) ** 1.5
-    pref = g * (a ** 1.5) / (rho * AVOGADRO) * theta
-    # More tightly bound nuclei have lower mass excess and are enhanced.
-    pref *= math.exp(-float(sp.mass_excess) / kt) if sp.mass_excess else 1.0
-    return max(float(pref), 1e-300)
+    # Quantum concentration (cm^-3) for a nucleus of mass A*m_u.  All energies
+    # are in MeV and hbar*c is in MeV*cm, so the units are consistent; the
+    # nucleon mass enters as its rest energy m_u c^2 = AMU_MEV, not its mass in
+    # grams.  The species mass is folded in through the a**1.5 term.
+    log_theta = 1.5 * math.log((AMU_MEV * kt) / (2.0 * math.pi * (_HBAR_C_MEV_CM ** 2)))
+    log_pref = math.log(max(g, 1e-300)) + 1.5 * math.log(a) + log_theta - math.log(rho * AVOGADRO)
+    # More tightly bound nuclei have lower mass excess and are enhanced.  The
+    # Z*ME(p)+N*ME(n) piece of the binding energy is linear in Z and N and is
+    # absorbed by the proton/neutron chemical potentials, so only -ME_i remains.
+    log_pref += -float(sp.mass_excess) / kt
+    return float(log_pref)
 
 
 @dataclass
@@ -102,12 +116,31 @@ def _moments(species: Sequence[Species], pref: np.ndarray, mu_p: float, mu_n: fl
     return float(xsum), float(ye), abund
 
 
-def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optional[Sequence[str]] = None, include_partition: bool = True, tol: float = 1e-10, max_iter: int = 100) -> NSEResult:
+def _log_moments(log_pref: np.ndarray, z: np.ndarray, a: np.ndarray, mu_p: float, mu_n: float) -> Tuple[float, np.ndarray]:
+    """Return ``(log(sum A_i Y_i), weights)`` via a stable log-sum-exp.
+
+    ``weights[i] = A_i Y_i / sum_j A_j Y_j`` and sums to one, so charge moments
+    can be formed as ``sum (Z_i/A_i) weights_i`` without overflow even when the
+    prefactors span tens of orders of magnitude.
+    """
+    n = a - z
+    log_w = log_pref + np.log(a) + z * mu_p + n * mu_n
+    m = float(np.max(log_w))
+    log_sum_a = m + math.log(float(np.sum(np.exp(log_w - m))))
+    weights = np.exp(log_w - log_sum_a)
+    return log_sum_a, weights
+
+
+def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optional[Sequence[str]] = None, include_partition: bool = True, tol: float = 1e-8, max_iter: int = 200) -> NSEResult:
     """Solve an NSE composition for a network.
 
-    The constraints are ``sum(A_i Y_i)=1`` and ``sum(Z_i Y_i)=Ye``.  A robust
-    SciPy root solve is used when available; otherwise a damped Newton method is
-    used.
+    The constraints are ``sum(A_i Y_i)=1`` and ``sum(Z_i Y_i)=Ye``.  The solve is
+    performed on the well-scaled residuals ``log(sum A_i Y_i)`` and
+    ``sum(Z_i Y_i)/sum(A_i Y_i) - Ye`` using a numerically stable log-sum-exp,
+    which keeps the iron-peak prefactors representable.  A Levenberg--Marquardt
+    least-squares solve is used when SciPy is available; otherwise an internal
+    damped LM iteration is used.  Several starting points are tried so the solve
+    is robust across temperature/density regimes.
     """
     names = [normalize_species_name(s) for s in (species or network.species_names())]
     sps = []
@@ -122,44 +155,76 @@ def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optio
             sps.append(sp)
     if not sps:
         raise ValueError("No valid species available for NSE solve")
-    pref = np.array([nse_prefactor(sp, t9, rho, include_partition=include_partition) for sp in sps], dtype=float)
+    log_pref = np.array([_log_prefactor(sp, t9, rho, include_partition=include_partition) for sp in sps], dtype=float)
+    z = np.array([sp.z for sp in sps], dtype=float)
+    a = np.array([sp.a for sp in sps], dtype=float)
+    ye = float(ye)
 
     def residual(mus):
-        xs, ys, _ = _moments(sps, pref, float(mus[0]), float(mus[1]))
-        return np.array([xs - 1.0, ys - float(ye)], dtype=float)
+        log_sum_a, weights = _log_moments(log_pref, z, a, float(mus[0]), float(mus[1]))
+        charge = float(np.sum((z / a) * weights))
+        return np.array([log_sum_a, charge - ye], dtype=float)
 
-    guess = np.array([0.0, 0.0], dtype=float)
+    guesses = [(0.0, 0.0), (-1.0, -1.0), (-5.0, -5.0), (-10.0, -10.0), (-20.0, -20.0)]
+    best_mu = np.array(guesses[0], dtype=float)
+    best_norm = float("inf")
+    message = ""
+    for guess in guesses:
+        mu, norm, msg = _solve_mu(residual, np.array(guess, dtype=float), tol, max_iter)
+        if norm < best_norm:
+            best_mu, best_norm, message = mu, norm, msg
+        if best_norm < tol:
+            break
+
+    mu_p, mu_n = float(best_mu[0]), float(best_mu[1])
+    abund = {sp.name: float(np.exp(min(lp + sp.z * mu_p + sp.n * mu_n, 700.0)))
+             for sp, lp in zip(sps, log_pref)}
+    success = best_norm < max(tol, 1e-6)
+    return NSEResult(t9, rho, ye, mu_p, mu_n, abund, success, message)
+
+
+def _solve_mu(residual, guess: np.ndarray, tol: float, max_iter: int) -> Tuple[np.ndarray, float, str]:
+    """Solve ``residual(mu)=0`` returning ``(mu, residual_norm, message)``."""
     try:
-        from scipy.optimize import root
-        sol = root(residual, guess, method="hybr", tol=tol)
-        mu = np.asarray(sol.x, dtype=float)
-        xs, ys, abund = _moments(sps, pref, mu[0], mu[1])
-        return NSEResult(t9, rho, ye, float(mu[0]), float(mu[1]), abund, bool(sol.success), str(sol.message))
+        from scipy.optimize import least_squares
+        sol = least_squares(residual, guess, method="lm", xtol=1e-14, ftol=1e-14, max_nfev=max_iter * 10)
+        return np.asarray(sol.x, dtype=float), float(np.linalg.norm(sol.fun)), str(sol.message)
     except Exception as exc:
-        mu = guess.copy()
-        msg = f"used internal damped Newton fallback ({exc})"
-        ok = False
-        for _ in range(max_iter):
-            r = residual(mu)
-            if float(np.linalg.norm(r, ord=2)) < tol:
-                ok = True
-                break
-            eps = 1e-5
-            j = np.column_stack([(residual(mu + [eps, 0]) - r) / eps, (residual(mu + [0, eps]) - r) / eps])
+        return _levenberg_marquardt(residual, guess, tol, max_iter) + (f"internal LM ({exc})",)
+
+
+def _levenberg_marquardt(residual, mu: np.ndarray, tol: float, max_iter: int) -> Tuple[np.ndarray, float]:
+    mu = np.clip(mu.astype(float), *_MU_BOUNDS)
+    lam = 1e-3
+    r = residual(mu)
+    norm = float(np.linalg.norm(r))
+    eps = 1e-6
+    for _ in range(max_iter):
+        if norm < tol:
+            break
+        j = np.column_stack([(residual(mu + [eps, 0]) - r) / eps, (residual(mu + [0, eps]) - r) / eps])
+        jtj = j.T @ j
+        grad = j.T @ r
+        improved = False
+        for _ in range(30):
             try:
-                step = np.linalg.solve(j, -r)
+                step = np.linalg.solve(jtj + lam * np.eye(2), -grad)
             except np.linalg.LinAlgError:
-                step = -0.1 * r
-            damp = 1.0
-            old = np.linalg.norm(r)
-            while damp > 1e-4:
-                trial = np.clip(mu + damp * step, *_MU_BOUNDS)
-                if np.linalg.norm(residual(trial)) < old:
-                    mu = trial
-                    break
-                damp *= 0.5
-        xs, ys, abund = _moments(sps, pref, mu[0], mu[1])
-        return NSEResult(t9, rho, ye, float(mu[0]), float(mu[1]), abund, ok, msg)
+                lam *= 10.0
+                continue
+            trial = np.clip(mu + step, *_MU_BOUNDS)
+            trial_norm = float(np.linalg.norm(residual(trial)))
+            if trial_norm < norm:
+                mu, r, norm = trial, residual(trial), trial_norm
+                lam = max(lam / 3.0, 1e-12)
+                improved = True
+                break
+            lam *= 3.0
+            if lam > 1e12:
+                break
+        if not improved:
+            break
+    return mu, norm
 
 
 def equilibrium_ratio(reaction, network: Network, t9: float, rho: float, ye: float) -> float:

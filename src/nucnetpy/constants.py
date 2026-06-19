@@ -11,6 +11,7 @@ KB_MEV = 8.617333262145e-11  # MeV K^-1
 KB_CGS = 1.380649e-16  # erg K^-1
 MEV_TO_ERG = 1.602176634e-6
 AMU_G = 1.66053906660e-24
+AMU_MEV = 931.49410242  # atomic mass unit energy, m_u c^2, in MeV
 CLIGHT = 2.99792458e10  # cm s^-1
 HBAR = 1.054571817e-27  # erg s
 NA = AVOGADRO

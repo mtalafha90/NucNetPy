@@ -52,7 +52,9 @@ class EvolutionResult:
         factors = []
         from .species import Species
         for name in self.species:
-            sp = species_map.get(name) if species_map else Species.parse(name)
+            sp = species_map.get(name) if species_map else None
+            if sp is None:
+                sp = Species.parse(name)
             factors.append(sp.a)
         return self.y * np.asarray(factors, dtype=float)[None, :]
 

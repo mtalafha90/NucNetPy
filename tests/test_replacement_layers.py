@@ -45,3 +45,31 @@ def test_screening_weakrate_validation_nse():
     assert any(i.code == 'nonconserving_reaction' for i in issues)
     nse = solve_nse(net, 5.0, 1e7, 0.5)
     assert nse.abundances
+
+
+def _iron_peak_network():
+    data = [("n", 8.071), ("h1", 7.289), ("he4", 2.425), ("c12", 0.0),
+            ("o16", -4.737), ("si28", -21.49), ("fe56", -60.6), ("ni56", -53.9)]
+    net = Network()
+    for name, me in data:
+        net.add_species(Species.parse(name, mass_excess=me))
+    return net
+
+
+def test_nse_satisfies_constraints():
+    net = _iron_peak_network()
+    for t9, rho, ye in [(5.0, 1e8, 0.5), (3.0, 1e7, 0.5), (10.0, 1e9, 0.45)]:
+        res = solve_nse(net, t9, rho, ye)
+        assert res.success
+        assert abs(res.xsum - 1.0) < 1e-6
+        assert abs(res.computed_ye - ye) < 1e-6
+
+
+def test_nse_symmetric_matter_favors_n_equals_z():
+    # At Ye=0.5 the most-bound N=Z iron-peak nucleus (ni56) should dominate.
+    net = _iron_peak_network()
+    res = solve_nse(net, 5.0, 1e8, 0.5)
+    x = {name: Species.parse(name).a * y for name, y in res.abundances.items()}
+    dominant = max(x, key=x.get)
+    assert dominant == "ni56"
+    assert x["ni56"] > 0.5
