@@ -1,5 +1,7 @@
 # NucNetPy
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20756798.svg)](https://doi.org/10.5281/zenodo.20756798)
+
 **NucNetPy** is a pure-Python nuclear reaction-network package that reproduces the
 main scientific workflows of the original C/C++ [NucNet Tools](https://sourceforge.net/projects/nucnet-tools/)
 ecosystem with a Python-native interface.
@@ -266,6 +268,17 @@ JINA/libnucnet data files used with this package. See [`LICENSE`](LICENSE).
 
 ## Citation
 
-If you use this package in scientific work, please acknowledge the original
-NucNet Tools / libnucnet ecosystem and the JINA reaction-rate database that
-provides the nuclear data.
+If you use this package in scientific work, please cite it via its archived
+release and acknowledge the original NucNet Tools / libnucnet ecosystem and the
+JINA reaction-rate database that provides the nuclear data.
+
+**DOI:** [10.5281/zenodo.20756798](https://doi.org/10.5281/zenodo.20756798)
+
+```bibtex
+@software{nucnetpy,
+  title  = {NucNetPy: a pure-Python nuclear reaction-network package},
+  url    = {https://github.com/mtalafha90/nucnetpy},
+  doi    = {10.5281/zenodo.20756798},
+  year   = {2026}
+}
+```

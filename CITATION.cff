@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+title: "NucNetPy: a pure-Python nuclear reaction-network package"
+abstract: >-
+  NucNetPy is a pure-Python nuclear reaction-network package that reproduces the
+  main scientific workflows of the NucNet Tools ecosystem: reading
+  JINA/libnucnet XML databases, evaluating reaction rates and flows, solving
+  nuclear statistical equilibrium, and integrating single-zone network evolution.
+type: software
+url: "https://github.com/mtalafha90/nucnetpy"
+repository-code: "https://github.com/mtalafha90/nucnetpy"
+license: "Research/educational conversion; check original NucNet Tools license before redistribution."
+version: "1.0.0a5"
+doi: 10.5281/zenodo.20756798
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.20756798
+    description: Zenodo archive of NucNetPy
