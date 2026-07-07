@@ -291,7 +291,7 @@ def _parse_reactions(root, net: Network):
                     coeffs = coeffs[:7]
                 if len(coeffs) == 7:
                     chapter = _int_or_none(_attr(fit, 'chapter', default=None))
-                    label = _attr(fit, 'label', 'note', default='') or source
+                    label = _attr(fit, 'label', 'note', 'source', default='') or source
                     fits.append(RateFit(coeffs, label=label, chapter=chapter))
 
         tabular = None
