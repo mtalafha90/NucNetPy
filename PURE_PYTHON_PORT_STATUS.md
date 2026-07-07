@@ -22,11 +22,17 @@ The C++ source contains helper files under `nnt/` and `user/`. This alpha adds P
 
 No C++ is used in this package. To make the Python code exactly match a chosen original C++ build, add golden-output tests generated once from the original tools, then tune the pure-Python formulas and tolerances until those tests pass.
 
-Recommended order:
+The framework for this now exists in-repo. `tests/test_golden_identity.py` implements the full recommended order below against golden files in `tests/golden/`, and `validation/generate_golden.py` regenerates those files:
 
-1. XML round-trip tests for your real networks.
-2. Rate-by-rate ReacLib comparisons on a T9 grid.
-3. Screening-factor comparisons for your chosen `user/screen.cpp` model.
-4. Weak-rate table comparisons.
-5. One-zone RHS `ydot` comparisons at fixed state.
-6. Full trajectory comparisons with identical time grids and tolerances.
+1. XML round-trip tests for your real networks — `test_xml_round_trip`, `test_round_trip_is_a_fixed_point` (identity tests, no golden data needed).
+2. Rate-by-rate ReacLib comparisons on a T9 grid — `test_reaclib_rates_on_t9_grid` vs `rates_reaclib.json`.
+3. Screening-factor comparisons for your chosen `user/screen.cpp` model — `test_screening_factors` vs `screening.json`.
+4. Weak-rate table comparisons — `test_weak_rate_table_interpolation` vs `weak_rates.json`.
+5. One-zone RHS `ydot` comparisons at fixed state — `test_ydot_at_fixed_states` vs `ydot.json` (also asserts nucleon-number conservation of the RHS).
+6. Full trajectory comparisons with identical time grids and tolerances — `test_full_trajectory` vs `trajectory.json` (deterministic fixed-step rk4), plus a solver cross-check that adaptive BDF agrees with the rk4 path.
+
+Out of the box the goldens are self-consistent snapshots of the current Python numerics, so any future change to a formula fails the suite immediately. To validate against a specific C++ NucNet Tools build:
+
+1. Replace the fixture inputs (`tests/golden/golden_network.xml`, `golden_weak_rates.txt`) with your production data, or keep them and reproduce the same inputs on the C++ side.
+2. Run the same grids through the original tools and write their outputs into the `data` blocks of the JSON files (set `source` to your build id).
+3. Loosen each file's `rtol`/`atol` to the agreement you require — the tolerances are read from the golden files, not hard-coded in the tests.

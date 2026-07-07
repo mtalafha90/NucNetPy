@@ -1,0 +1,121 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!--
+Golden reference network for numerical-identity tests.
+
+This network intentionally exercises every rate representation nucnetpy
+supports: seven-parameter ReacLib fits (including a two-fit reaction),
+a tabular rate, and a constant (single) rate.  Mass excesses are real
+AME-style values in MeV so NSE/Q-value paths are meaningful.
+
+The ReacLib coefficients are fixed test values.  To compare against an
+original C++ NucNet Tools build, replace them with the exact fits from
+your production reaction XML and regenerate the goldens with
+validation/generate_golden.py (see its module docstring).
+-->
+<nucnetpy>
+  <nuclear_data>
+    <nuclide name="n" z="0" a="1" mass_excess="8.0713"/>
+    <nuclide name="h1" z="1" a="1" mass_excess="7.2890"/>
+    <nuclide name="he4" z="2" a="4" mass_excess="2.4249">
+      <partf_table>
+        <point><t9>1.0</t9><partf>1.0</partf></point>
+        <point><t9>5.0</t9><partf>1.0</partf></point>
+        <point><t9>10.0</t9><partf>1.02</partf></point>
+      </partf_table>
+    </nuclide>
+    <nuclide name="be8" z="4" a="8" mass_excess="4.9416"/>
+    <nuclide name="c12" z="6" a="12" mass_excess="0.0"/>
+    <nuclide name="n13" z="7" a="13" mass_excess="5.3455"/>
+    <nuclide name="o16" z="8" a="16" mass_excess="-4.7370"/>
+    <nuclide name="ne20" z="10" a="20" mass_excess="-7.0419"/>
+  </nuclear_data>
+  <reaction_data>
+    <reaction label="triple_alpha_testfit" q="7.2747">
+      <reactant>he4</reactant>
+      <reactant>he4</reactant>
+      <reactant>he4</reactant>
+      <product>c12</product>
+      <non_smoker_fit>
+        <a1>-24.3505</a1>
+        <a2>-4.12656</a2>
+        <a3>-13.49</a3>
+        <a4>21.4259</a4>
+        <a5>-1.34769</a5>
+        <a6>0.0879816</a6>
+        <a7>-13.1653</a7>
+      </non_smoker_fit>
+    </reaction>
+    <reaction label="c12_ag_o16_testfit" q="7.1616">
+      <reactant>c12</reactant>
+      <reactant>he4</reactant>
+      <product>o16</product>
+      <non_smoker_fit>
+        <fit label="fit_a">
+          <a1>69.6526</a1>
+          <a2>-1.39254</a2>
+          <a3>58.9128</a3>
+          <a4>-148.273</a4>
+          <a5>9.08324</a5>
+          <a6>-0.541041</a6>
+          <a7>70.3554</a7>
+        </fit>
+        <fit label="fit_b">
+          <a1>254.634</a1>
+          <a2>-1.84097</a2>
+          <a3>103.411</a3>
+          <a4>-420.567</a4>
+          <a5>64.0874</a5>
+          <a6>-12.4624</a6>
+          <a7>137.303</a7>
+        </fit>
+      </non_smoker_fit>
+    </reaction>
+    <reaction label="h1_c12_ng_n13_testfit" q="1.9435">
+      <reactant>c12</reactant>
+      <reactant>h1</reactant>
+      <product>n13</product>
+      <non_smoker_fit>
+        <a1>17.1482</a1>
+        <a2>0.0</a2>
+        <a3>-13.692</a3>
+        <a4>-0.230881</a4>
+        <a5>4.44362</a5>
+        <a6>-3.15898</a6>
+        <a7>-0.666667</a7>
+      </non_smoker_fit>
+    </reaction>
+    <reaction label="o16_ag_ne20_tabular" q="4.7297">
+      <reactant>o16</reactant>
+      <reactant>he4</reactant>
+      <product>ne20</product>
+      <tabular_rate>
+        <point t9="0.1" rate="1.0e-24"/>
+        <point t9="0.5" rate="3.0e-12"/>
+        <point t9="1.0" rate="2.0e-6"/>
+        <point t9="2.0" rate="4.0e-2"/>
+        <point t9="5.0" rate="7.0e2"/>
+        <point t9="10.0" rate="9.0e4"/>
+      </tabular_rate>
+    </reaction>
+    <reaction label="be8_decay_constant" q="0.0918">
+      <reactant>be8</reactant>
+      <product>he4</product>
+      <product>he4</product>
+      <single_rate>8.19e15</single_rate>
+    </reaction>
+  </reaction_data>
+  <zone_data>
+    <zone label1="golden" label2="0" label3="0">
+      <optional_properties>
+        <property name="t9">0.5</property>
+        <property name="rho">1e5</property>
+      </optional_properties>
+      <abundances>
+        <abundance name="h1" y="0.5"/>
+        <abundance name="he4" y="0.1"/>
+        <abundance name="c12" y="0.005"/>
+        <abundance name="o16" y="0.00225"/>
+      </abundances>
+    </zone>
+  </zone_data>
+</nucnetpy>
