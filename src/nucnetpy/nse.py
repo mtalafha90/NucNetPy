@@ -131,7 +131,7 @@ def _log_moments(log_pref: np.ndarray, z: np.ndarray, a: np.ndarray, mu_p: float
     return log_sum_a, weights
 
 
-def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optional[Sequence[str]] = None, include_partition: bool = True, tol: float = 1e-8, max_iter: int = 200) -> NSEResult:
+def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optional[Sequence[str]] = None, include_partition: bool = True, tol: float = 1e-8, max_iter: int = 200, nse_correction=None) -> NSEResult:
     """Solve an NSE composition for a network.
 
     The constraints are ``sum(A_i Y_i)=1`` and ``sum(Z_i Y_i)=Ye``.  The solve is
@@ -141,6 +141,11 @@ def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optio
     least-squares solve is used when SciPy is available; otherwise an internal
     damped LM iteration is used.  Several starting points are tried so the solve
     is robust across temperature/density regimes.
+
+    ``nse_correction`` is an optional callable ``(species, t9, rho, ye) ->
+    f_corr`` added to each species' NSE exponent, the libnucnet NSE correction
+    factor hook.  Pass :func:`nucnetpy.coulomb.nse_correction` for the Bravo &
+    Garcia-Senz Coulomb correction.
     """
     names = [normalize_species_name(s) for s in (species or network.species_names())]
     sps = []
@@ -156,6 +161,8 @@ def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optio
     if not sps:
         raise ValueError("No valid species available for NSE solve")
     log_pref = np.array([_log_prefactor(sp, t9, rho, include_partition=include_partition) for sp in sps], dtype=float)
+    if nse_correction is not None:
+        log_pref = log_pref + np.array([float(nse_correction(sp, t9, rho, float(ye))) for sp in sps], dtype=float)
     z = np.array([sp.z for sp in sps], dtype=float)
     a = np.array([sp.a for sp in sps], dtype=float)
     ye = float(ye)
