@@ -76,13 +76,146 @@ def compare_rates(net_a: Network, net_b: Network, t9: float, rho: float = 1.0) -
 
 
 def separation_energy(species_name: str, species_map: Mapping[str, Species], particle: str = "n") -> Optional[float]:
+    """Return S_n or S_p in MeV, or None if the needed nuclides are absent.
+
+    ``S_n(Z, A) = ME(Z, A-1) + ME(n) - ME(Z, A)`` and
+    ``S_p(Z, A) = ME(Z-1, A-1) + ME(p) - ME(Z, A)``.
+    """
+    from .species import species_from_za
     sp = species_map.get(normalize_species_name(species_name), Species.parse(species_name))
-    if particle.lower() == "n":
-        daughter_name = Species.parse(f"{sp.element}{sp.a-1}").name if sp.a > 1 else None
-        particle_name = "n"
-    else:
-        daughter_name = Species.parse(f"{sp.element}{sp.a-1}").name if sp.a > 1 else None
-        particle_name = "h1"
-    if not daughter_name or daughter_name not in species_map or particle_name not in species_map:
+    if sp.a <= 1:
+        return None
+    try:
+        if particle.lower() == "n":
+            daughter_name = species_from_za(sp.z, sp.a - 1).name
+            particle_name = "n"
+        else:
+            if sp.z < 1:
+                return None
+            daughter_name = species_from_za(sp.z - 1, sp.a - 1).name
+            particle_name = "h1"
+    except ValueError:
+        return None
+    if daughter_name not in species_map or particle_name not in species_map:
         return None
     return species_map[daughter_name].mass_excess + species_map[particle_name].mass_excess - sp.mass_excess
+
+
+def charge_changing_flows(network: Network, zone_index: int = 0, t9: Optional[float] = None, rho: Optional[float] = None) -> Dict[str, float]:
+    """Return each reaction's contribution to dYe/dt (flux times net ΔZ).
+
+    Only reactions with a nonzero nuclear charge change (weak reactions such as
+    beta decays and electron captures) appear in the result; strong reactions
+    conserve Z and contribute nothing.  ``sum(result.values())`` is dYe/dt.
+    """
+    z = network.zone(zone_index)
+    t9 = t9 or z.temperature9(); rho = rho or z.density()
+    out: Dict[str, float] = {}
+    for r in network.reactions.reactions:
+        dz = 0
+        for name, coeff in r.stoichiometry().items():
+            sp = network.species.get(name)
+            if sp is None:
+                try:
+                    sp = Species.parse(name)
+                except Exception:
+                    continue
+            if sp.a > 0 and sp.z >= 0:
+                dz += coeff * sp.z
+        if dz != 0:
+            out[r.string] = dz * r.flux(z.abundances, t9=t9, rho=rho)
+    return out
+
+
+def system_timescales(network: Network, zone_index: int = 0, t9: Optional[float] = None, rho: Optional[float] = None) -> Dict[str, float]:
+    """Return per-species timescales ``Y / |dY/dt|`` in seconds.
+
+    Species with zero derivative get ``inf``.  The shortest timescales identify
+    the stiffest components of the system (blog: "Computing system timescales").
+    """
+    z = network.zone(zone_index)
+    t9 = t9 or z.temperature9(); rho = rho or z.density()
+    dy = network.reactions.ydot(z.abundances, t9=t9, rho=rho)
+    out: Dict[str, float] = {}
+    for name in set(z.abundances) | set(dy):
+        y = z.get_abundance(name)
+        rate = abs(dy.get(name, 0.0))
+        out[name] = float(y / rate) if rate > 0.0 else float("inf")
+    return out
+
+
+def heavy_nuclei_abundance(zone: Zone, species_map: Mapping[str, Species], zmin: int = 3) -> float:
+    """Return Y_h, the total abundance of nuclei with Z >= ``zmin``.
+
+    The photon-to-heavy-nucleus ratio and the r-process neutron-to-seed ratio
+    are built from this quantity (blog: "Computing the number of heavy nuclei").
+    """
+    total = 0.0
+    for name, y in zone.abundances.items():
+        sp = species_map.get(name)
+        if sp is None:
+            try:
+                sp = Species.parse(name)
+            except Exception:
+                continue
+        if sp.z >= zmin:
+            total += y
+    return float(total)
+
+
+def neutron_exposure(result, thermo) -> float:
+    """Return the s-process neutron exposure tau = ∫ n_n v_T dt in mb^-1.
+
+    ``result`` is an :class:`~nucnetpy.solver.EvolutionResult` whose species
+    include the neutron; ``thermo`` is the same ``(t, abundances) -> (t9, rho)``
+    function used for the evolution.  ``n_n = rho N_A Y_n`` and the thermal
+    velocity is ``v_T = sqrt(2 k T / m_n)`` (blog: "Computing the s-process
+    neutron exposure").
+    """
+    from .constants import AVOGADRO, KB_CGS, MN_G
+    if "n" not in result.species:
+        return 0.0
+    j = result.species.index("n")
+    integrand = np.zeros(len(result.time))
+    for i, t in enumerate(result.time):
+        abund = {s: float(v) for s, v in zip(result.species, result.y[i])}
+        t9, rho = thermo(float(t), abund)
+        n_n = max(float(rho), 0.0) * AVOGADRO * max(float(result.y[i, j]), 0.0)
+        v_t = np.sqrt(2.0 * KB_CGS * max(float(t9), 1e-30) * 1.0e9 / MN_G)
+        integrand[i] = n_n * v_t
+    trapezoid = getattr(np, "trapezoid", None) or np.trapz  # numpy < 2.0 compat
+    tau_cm2 = float(trapezoid(integrand, np.asarray(result.time, dtype=float)))
+    return tau_cm2 * 1.0e-27  # cm^-2 -> mb^-1
+
+
+def entropy_generation_rate(network: Network, zone_index: int = 0, t9: Optional[float] = None, rho: Optional[float] = None) -> float:
+    """Return dS/dt per nucleon in units of k_B per second.
+
+    Uses ``dS/dt = -sum_i (mu_i/kT) dY_i/dt`` with Maxwell–Boltzmann chemical
+    potentials ``mu_i/kT = ln Y_i - ln pref_i`` built from the same Saha
+    prefactors as the NSE solver; baryon conservation removes the rest-mass
+    reference (blog series "Computing the entropy generation rate").  The
+    result is non-negative for any closed reaction system evolving toward
+    equilibrium.
+    """
+    from .nse import _log_prefactor
+    import math
+    z = network.zone(zone_index)
+    t9 = t9 or z.temperature9(); rho = rho or z.density()
+    dy = network.reactions.ydot(z.abundances, t9=t9, rho=rho)
+    total = 0.0
+    for name, ydot_val in dy.items():
+        if ydot_val == 0.0:
+            continue
+        sp = network.species.get(name)
+        if sp is None:
+            try:
+                sp = Species.parse(name)
+            except Exception:
+                continue
+        if sp.a <= 0:
+            continue
+        y = max(z.get_abundance(name), 1e-300)
+        mu_kt = math.log(y) - _log_prefactor(sp, t9, rho)
+        total -= mu_kt * ydot_val
+    return float(total)

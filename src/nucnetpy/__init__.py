@@ -14,9 +14,12 @@ from .weak import WeakRateTable, read_weak_table, compute_yedot
 from .validation import validate_network, validate_zone, regression_summary
 
 from .mathutils import linear_interpolation, bilinear_interpolation, two_d_interpolation
-from .decay import DecayRecord, decay_constant_from_half_life, add_decay_records
+from .decay import DecayRecord, decay_constant_from_half_life, add_decay_records, fission_reaction
 from .hydro import Trajectory, read_trajectory, exponential_expansion
 from .matrix_solver import solve_linear
-from .network_limiter import limit_network
+from .network_limiter import limit_network, select_species
 from .neutrino import NeutrinoLuminosity, NeutrinoQuantity, geometric_flux_rate
 from .rate_modifiers import RateModifierRegistry, constant_factor, exp_temperature_factor
+from .detailed_balance import log_equilibrium_constant, reverse_rate, reverse_reaction, net_flows
+from .analysis import (charge_changing_flows, system_timescales, heavy_nuclei_abundance,
+                       neutron_exposure, entropy_generation_rate, separation_energy)
