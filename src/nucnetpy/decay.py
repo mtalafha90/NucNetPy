@@ -33,3 +33,20 @@ def add_decay_records(network, records: Iterable[DecayRecord]) -> None:
 
 def decay_constant_from_half_life(half_life: float) -> float:
     return 0.0 if half_life <= 0 else LN2 / float(half_life)
+
+
+def fission_reaction(parent: str, fragments: Iterable[str], neutrons: int = 0, rate: float = 0.0, mode: str = "sf") -> Reaction:
+    """Return a fission reaction ``parent -> fragments + neutrons * n``.
+
+    ``rate`` is the fission decay constant in 1/s (use
+    :func:`decay_constant_from_half_life` for spontaneous-fission half-lives).
+    ``mode`` labels the channel, e.g. ``"sf"`` (spontaneous) or ``"bdf"``
+    (beta-delayed); for neutron-induced fission build a normal two-reactant
+    Reaction instead.  Blog workflow: "Adding fission to an r-process
+    calculation".
+    """
+    products = [ReactionParticipant(f) for f in fragments]
+    if int(neutrons) > 0:
+        products.append(ReactionParticipant("n", int(neutrons)))
+    return Reaction([ReactionParticipant(parent)], products,
+                    constant_rate=float(rate), source="fission", label=str(mode))

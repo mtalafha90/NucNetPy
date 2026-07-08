@@ -4,7 +4,8 @@ from pathlib import Path
 
 from ..io.xml import read_xml, write_xml
 from ..io.jina import read_jina_xml, combine_jina_xml, jina_database_summary
-from ..analysis import largest_mass_fractions, species_history, flows, ydot, element_abundances, abundance_moment, energy_generation_rate, compare_rates
+from ..analysis import largest_mass_fractions, species_history, flows, ydot, element_abundances, abundance_moment, energy_generation_rate, compare_rates, charge_changing_flows, system_timescales, entropy_generation_rate
+from ..detailed_balance import net_flows as detailed_net_flows
 from ..solver import evolve_zone, constant_thermo, time_grid
 from ..graph import reaction_network_dot
 from ..nse import solve_nse
@@ -74,6 +75,34 @@ def cmd_ydot(args):
     n = _load(args.xml)
     for s, val in sorted(ydot(n, args.zone_index, args.t9, args.rho).items()):
         if abs(val) >= args.min_abs: print(f"{s:8s} {val:.12e}")
+
+
+def cmd_net_flows(args):
+    n = _load(args.xml); z = n.zone(args.zone_index)
+    t9 = args.t9 or z.temperature9(); rho = args.rho or z.density()
+    for r, (f, rev, net) in detailed_net_flows(n, z.abundances, t9=t9, rho=rho).items():
+        if max(abs(f), abs(rev)) >= args.min_flow:
+            print(f"{r:60s} fwd={f:.6e} rev={rev:.6e} net={net:.6e}")
+
+
+def cmd_charge_flows(args):
+    n = _load(args.xml)
+    contributions = charge_changing_flows(n, args.zone_index, args.t9, args.rho)
+    for r, val in sorted(contributions.items(), key=lambda kv: -abs(kv[1])):
+        if abs(val) >= args.min_flow: print(f"{r:60s} {val:.12e}")
+    print(f"dYe/dt {sum(contributions.values()):.12e}")
+
+
+def cmd_timescales(args):
+    n = _load(args.xml)
+    ts = system_timescales(n, args.zone_index, args.t9, args.rho)
+    for s, val in sorted(ts.items(), key=lambda kv: kv[1])[:args.n]:
+        print(f"{s:8s} {val:.12e}")
+
+
+def cmd_entropy(args):
+    n = _load(args.xml)
+    print(entropy_generation_rate(n, args.zone_index, args.t9, args.rho))
 
 
 def cmd_conservation(args):
@@ -190,6 +219,10 @@ def build_parser():
     s = sub.add_parser('rates'); add_xml(s); s.add_argument('--t9', type=float, default=1.0); s.add_argument('--rho', type=float, default=1.0); s.add_argument('--min-rate', type=float, default=0.0); s.set_defaults(func=cmd_rates)
     s = sub.add_parser('flows'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--min-flow', type=float, default=0.0); s.set_defaults(func=cmd_flows)
     s = sub.add_parser('ydot'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--min-abs', type=float, default=0.0); s.set_defaults(func=cmd_ydot)
+    s = sub.add_parser('net-flows', help='forward, detailed-balance reverse, and net fluxes'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--min-flow', type=float, default=0.0); s.set_defaults(func=cmd_net_flows)
+    s = sub.add_parser('charge-flows', help='per-reaction dYe/dt contributions'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--min-flow', type=float, default=0.0); s.set_defaults(func=cmd_charge_flows)
+    s = sub.add_parser('timescales', help='shortest species timescales Y/|dY/dt|'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('-n', type=int, default=20); s.set_defaults(func=cmd_timescales)
+    s = sub.add_parser('entropy-generation', help='dS/dt per nucleon in k_B/s'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.set_defaults(func=cmd_entropy)
     s = sub.add_parser('conservation'); add_xml(s); s.add_argument('--max', type=int, default=20); s.set_defaults(func=cmd_conservation)
     s = sub.add_parser('remove-duplicates'); add_xml(s); s.add_argument('output'); s.set_defaults(func=cmd_remove_duplicates)
     s = sub.add_parser('remove-invalid'); add_xml(s); s.add_argument('output'); s.set_defaults(func=cmd_remove_invalid)
