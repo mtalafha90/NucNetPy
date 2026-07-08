@@ -22,4 +22,9 @@ from .neutrino import NeutrinoLuminosity, NeutrinoQuantity, geometric_flux_rate
 from .rate_modifiers import RateModifierRegistry, constant_factor, exp_temperature_factor
 from .detailed_balance import log_equilibrium_constant, reverse_rate, reverse_reaction, net_flows
 from .analysis import (charge_changing_flows, system_timescales, heavy_nuclei_abundance,
-                       neutron_exposure, entropy_generation_rate, separation_energy)
+                       neutron_exposure, entropy_generation_rate, separation_energy,
+                       integrated_currents, reaction_entropy_changes)
+from .coulomb import (nse_correction as coulomb_nse_correction, gamma_e,
+                      species_coulomb_chemical_potential, species_coulomb_energy,
+                      species_coulomb_entropy, coulomb_entropy_per_nucleon)
+from .qse import solve_qse, QSECluster, QSEResult, cluster_abundance, cluster_ydot

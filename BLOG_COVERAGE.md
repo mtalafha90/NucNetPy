@@ -55,14 +55,27 @@ are omitted.
 | Updating mass excesses in a nuclide XML | edit `Species.mass_excess`, re-`write_xml` |
 | Counting matrix elements; arrow matrix storage | `jacobian_sparsity` (SciPy sparse replaces arrow solver) |
 
+## Ported from the C++ source (r647)
+
+These items were verified against the actual NucNet Tools SVN trunk
+(`nucnet-tools-code` r647, downloaded from SourceForge) and ported from the
+named C++ files:
+
+| Blog workflow | C++ origin | nucnetpy feature |
+|---|---|---|
+| Studying Coulomb corrections to NSE; including NSE corrections in a network calculation | `user/nse_corr.cpp` (Bravo & García-Senz 1999, Ogata & Ichimaru constants) | `coulomb` module: `gamma_e`, `species_coulomb_chemical_potential` / `_energy` / `_entropy`, `coulomb_nse_correction`; `solve_nse(..., nse_correction=...)` hook |
+| Computing NSE corrections to the entropy | `user/nse_corr.cpp` (`species_coulomb_entropy`) | `coulomb_entropy_per_nucleon` |
+| Comparing network calculations to equilibrium; (n,γ)-(γ,n) equilibrium; constraining the equilibrium | libnuceq clusters via `examples/analysis/compare_equil.cpp` | `solve_qse` with `QSECluster` constraints (one multiplier per cluster on top of μ_p/μ_n) |
+| Calculating cluster flows | `examples/analysis/compute_Ycdot.cpp` | `cluster_ydot`, `cluster_abundance` |
+| Creating/analyzing integrated currents diagrams | `user/flow_utilities.cpp` (`update_flow_currents`: current += (f−r)·dt) | `integrated_currents` over an `EvolutionResult` |
+| Computing the entropy generation rate (per reaction, with reverse flows) | `user/flow_utilities.cpp` (`compute_entropy_generation_rate`) | `entropy_generation_rate(use_reverse=True)` — Σ(f−r)·ln(f/r), non-negative, vanishes at NSE; `reaction_entropy_changes` |
+
 ## Not ported (by design or still open)
 
 | Blog workflow | Status |
 |---|---|
-| Coulomb corrections to NSE; NSE corrections to entropy | open — would need a plasma free-energy model beyond weak screening |
 | Constant-entropy evolution with self-consistent entropy inverter | partial — `thermo` inverters exist; no closed-loop driver |
-| Cluster flows / QSE cluster equilibria (libnuceq clusters) | open — full NSE only |
-| Integrated currents diagrams | open — per-step flows available; time integration left to the user |
+| Electron/positron chemical-potential terms in entropy generation (libstatmech) | open — weak reactions carry tabulated rates instead |
 | Fission *cycling* studies (automatic fragment distributions) | partial — `fission_reaction` builds channels; distributions are user input |
 | Downloading webnucleo XML files | use the URLs in the blog post; nucnetpy reads them directly |
 | XML inclusion (XInclude) / XSLT transforms | use `lxml` externally, then `read_xml` |
