@@ -1,12 +1,12 @@
 """nucnetpy: pure-Python replacement layer for NucNet Tools workflows."""
 from .species import Species, species_from_za, normalize_species_name
 from .core import Network, Zone
-from .reactions import Reaction, ReactionParticipant, ReactionNetwork, RateFit, TabularRate
+from .reactions import Reaction, ReactionParticipant, ReactionNetwork, RateFit, TabularRate, read_reaclib_text
 from .solver import evolve_zone, evolve_network_zones, constant_thermo, time_grid, EvolutionResult, jacobian, jacobian_sparsity
 from .io.xml import read_xml, write_xml, read_network_xml, write_zone_xml, read_xml_string
 from .io.jina import read_jina_xml, combine_jina_xml, jina_database_summary
 
-__version__ = "1.0.0a5"
+__version__ = "1.0.0"
 
 from .nse import solve_nse, NSEResult, equilibrium_ratio
 from .screening import ScreeningContext, weak_screening_factor, reaction_screening_factor, graboske_intermediate_factor
@@ -23,7 +23,9 @@ from .rate_modifiers import RateModifierRegistry, constant_factor, exp_temperatu
 from .detailed_balance import log_equilibrium_constant, reverse_rate, reverse_reaction, net_flows
 from .analysis import (charge_changing_flows, system_timescales, heavy_nuclei_abundance,
                        neutron_exposure, entropy_generation_rate, separation_energy,
-                       integrated_currents, reaction_entropy_changes)
+                       integrated_currents, reaction_entropy_changes,
+                       flows, ydot, energy_generation_rate, largest_mass_fractions,
+                       element_abundances, abundance_moment, abundances_vs_nucleon_number)
 from .coulomb import (nse_correction as coulomb_nse_correction, gamma_e,
                       species_coulomb_chemical_potential, species_coulomb_energy,
                       species_coulomb_entropy, coulomb_entropy_per_nucleon)

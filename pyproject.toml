@@ -4,17 +4,35 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nucnetpy"
-version = "1.0.0a5"
-description = "Pure-Python replacement package for NucNet Tools workflows"
+version = "1.0.0"
+description = "Pure-Python nuclear reaction networks: a replacement for NucNet Tools workflows"
 readme = "README.md"
 requires-python = ">=3.9"
-authors = [{name = "Converted with ChatGPT"}]
-license = {text = "Research/educational conversion; check original NucNet Tools license before redistribution."}
+authors = [{name = "NucNetPy Developers"}]
+license = {text = "GPL-3.0-or-later"}
+keywords = [
+    "nucleosynthesis", "nuclear-astrophysics", "reaction-network",
+    "nucnet-tools", "libnucnet", "NSE", "r-process", "s-process",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+]
 dependencies = ["numpy>=1.22", "scipy>=1.9"]
+
+[project.urls]
+Homepage = "https://github.com/mtalafha90/NucNetPy"
+Repository = "https://github.com/mtalafha90/NucNetPy"
+Issues = "https://github.com/mtalafha90/NucNetPy/issues"
+DOI = "https://doi.org/10.5281/zenodo.20756798"
 
 [project.optional-dependencies]
 hdf5 = ["h5py>=3.8"]
-solver = ["scipy>=1.9"]
 plot = ["matplotlib>=3.6", "networkx>=2.8"]
 dev = ["pytest>=7"]
 
@@ -23,3 +41,6 @@ nucnetpy = "nucnetpy.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

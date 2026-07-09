@@ -180,8 +180,30 @@ def cmd_validate(args):
 
 def cmd_nse(args):
     n = _load(args.xml)
-    res = solve_nse(n, t9=args.t9, rho=args.rho, ye=args.ye)
+    corr = None
+    if args.coulomb:
+        from ..coulomb import nse_correction as corr
+    res = solve_nse(n, t9=args.t9, rho=args.rho, ye=args.ye, nse_correction=corr)
     print(f"success {res.success} mu_p {res.mu_p:.8e} mu_n {res.mu_n:.8e} xsum {res.xsum:.8e} ye {res.computed_ye:.8e}")
+    for name, y in sorted(res.abundances.items()):
+        x = n.species.get(name).a * y if name in n.species else y
+        if y >= args.min_abundance or x >= args.min_x:
+            print(f"{name:8s} Y={y:.12e} X={x:.12e}")
+
+
+def cmd_qse(args):
+    from ..qse import solve_qse, QSECluster
+    n = _load(args.xml)
+    clusters = []
+    for spec in args.cluster or []:
+        names, _, constraint = spec.rpartition(':')
+        clusters.append(QSECluster([s for s in names.split(',') if s], float(constraint)))
+    corr = None
+    if args.coulomb:
+        from ..coulomb import nse_correction as corr
+    res = solve_qse(n, t9=args.t9, rho=args.rho, ye=args.ye, clusters=clusters, nse_correction=corr)
+    lam = ' '.join(f"{v:.6e}" for v in res.lambdas)
+    print(f"success {res.success} mu_p {res.mu_p:.8e} mu_n {res.mu_n:.8e} lambdas [{lam}] xsum {res.xsum:.8e} ye {res.computed_ye:.8e}")
     for name, y in sorted(res.abundances.items()):
         x = n.species.get(name).a * y if name in n.species else y
         if y >= args.min_abundance or x >= args.min_x:
@@ -233,7 +255,8 @@ def build_parser():
     s = sub.add_parser('energy-generation'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.set_defaults(func=cmd_energy)
     s = sub.add_parser('net-dot'); add_xml(s); s.add_argument('-o','--output'); s.add_argument('--t9', type=float, default=1.0); s.add_argument('--rho', type=float, default=1.0); s.add_argument('--min-rate', type=float, default=0.0); s.set_defaults(func=cmd_dot)
     s = sub.add_parser('validate'); add_xml(s); s.add_argument('--strict', action='store_true'); s.add_argument('--max', type=int, default=50); s.add_argument('--max-zones', type=int, default=10); s.set_defaults(func=cmd_validate)
-    s = sub.add_parser('nse'); add_xml(s); s.add_argument('--t9', type=float, required=True); s.add_argument('--rho', type=float, required=True); s.add_argument('--ye', type=float, required=True); s.add_argument('--min-abundance', type=float, default=0.0); s.add_argument('--min-x', type=float, default=0.0); s.set_defaults(func=cmd_nse)
+    s = sub.add_parser('nse'); add_xml(s); s.add_argument('--t9', type=float, required=True); s.add_argument('--rho', type=float, required=True); s.add_argument('--ye', type=float, required=True); s.add_argument('--coulomb', action='store_true', help='apply Bravo & Garcia-Senz Coulomb corrections'); s.add_argument('--min-abundance', type=float, default=0.0); s.add_argument('--min-x', type=float, default=0.0); s.set_defaults(func=cmd_nse)
+    s = sub.add_parser('qse', help='constrained cluster equilibrium (libnuceq)'); add_xml(s); s.add_argument('--t9', type=float, required=True); s.add_argument('--rho', type=float, required=True); s.add_argument('--ye', type=float, required=True); s.add_argument('--cluster', action='append', metavar='SP1,SP2,...:Y', help='cluster species and constrained total abundance; repeatable'); s.add_argument('--coulomb', action='store_true'); s.add_argument('--min-abundance', type=float, default=0.0); s.add_argument('--min-x', type=float, default=0.0); s.set_defaults(func=cmd_qse)
 
     s = sub.add_parser('jina-summary', help='summarize separate JINA nuclide and reaction XML files')
     s.add_argument('nuclides_xml')
