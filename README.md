@@ -1,6 +1,8 @@
 # NucNetPy
 
+[![CI](https://github.com/mtalafha90/NucNetPy/actions/workflows/ci.yml/badge.svg)](https://github.com/mtalafha90/NucNetPy/actions/workflows/ci.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20756798.svg)](https://doi.org/10.5281/zenodo.20756798)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 **NucNetPy** is a pure-Python nuclear reaction-network package that reproduces the
 main scientific workflows of the original C/C++ [NucNet Tools](https://sourceforge.net/projects/nucnet-tools/)
@@ -31,14 +33,26 @@ reimplementation in Python on top of NumPy and SciPy.
 - **Evolution** — one-zone and multi-zone integration with SciPy BDF/Radau/LSODA
   (plus fixed-step RK4 / implicit Euler fallbacks), analytic sparsity pattern and
   numerical Jacobian, positivity projection, and screening / weak-rate hooks.
-- **NSE** — robust nuclear statistical equilibrium solve for `sum(A·Y)=1` and
-  `sum(Z·Y)=Ye` using a numerically stable log-sum-exp formulation.
+- **NSE & QSE** — robust nuclear statistical equilibrium solve for `sum(A·Y)=1`
+  and `sum(Z·Y)=Ye` using a numerically stable log-sum-exp formulation;
+  constrained cluster equilibria (`solve_qse`, the libnuceq cluster workflow);
+  optional Bravo & García-Senz **Coulomb corrections** ported from the NucNet
+  Tools C++ source.
+- **Detailed balance** — reverse reaction rates from the forward rate, masses,
+  and partition functions; forward/reverse/net flows that vanish at NSE;
+  tabulated photodisintegration partners for (n,γ)-(γ,n) studies.
 - **Physics helpers** — electron screening (weak/intermediate), 2-D weak-rate
-  tables, decays, hydrodynamic trajectories, neutrino rates, and thermodynamic
-  utilities.
+  tables, decays and fission channels, hydrodynamic trajectories, neutrino
+  rates, and thermodynamic utilities.
 - **Analysis & validation** — largest mass fractions, element abundances,
-  abundance moments, energy generation, regression comparisons, and Graphviz DOT
+  abundance moments, energy and **entropy generation rates**, charge-changing
+  flows (dYe/dt), species timescales, s-process neutron exposure, integrated
+  currents, separation energies, regression comparisons, and Graphviz DOT
   export.
+- **Golden-output regression suite** — numerical-identity tests
+  (`tests/test_golden_identity.py`) that pin every rate, flow, and trajectory
+  against frozen snapshots, ready to be repointed at outputs of an original
+  C++ NucNet Tools build.
 - **Tooling** — a `nucnetpy` command-line interface and Jupyter tutorial
   notebooks.
 
@@ -181,10 +195,14 @@ tools. A selection:
 | `zone-abundances`, `zone-properties` | inspect a single zone |
 | `element-abundances` | abundances grouped by element |
 | `rates`, `flows`, `ydot` | rate, flow, and derivative evaluation |
+| `net-flows` | forward, detailed-balance reverse, and net fluxes |
+| `charge-flows` | per-reaction dYe/dt contributions |
+| `timescales` | shortest species timescales Y/\|dY/dt\| |
 | `conservation`, `validate` | A/Z conservation and network validation |
 | `evolve-zone` | integrate one zone in time |
-| `nse` | nuclear statistical equilibrium solve |
-| `energy-generation` | nuclear energy generation rate |
+| `nse` | nuclear statistical equilibrium solve (`--coulomb` for plasma corrections) |
+| `qse` | constrained cluster equilibrium (libnuceq-style) |
+| `energy-generation`, `entropy-generation` | energy and entropy generation rates |
 | `net-dot` | export the network as a Graphviz DOT graph |
 | `species-history` | track a species across zones |
 | `remove-duplicates`, `remove-invalid` | clean a reaction set |
@@ -223,29 +241,36 @@ jupyter notebook notebooks
 ```text
 nucnetpy/
 ├── pyproject.toml
-├── README.md
-├── CONVERSION_MAP.md            # NucNet Tools concept -> nucnetpy mapping
-├── JINA_XML_WORKFLOW.md
-├── PURE_PYTHON_PORT_STATUS.md
+├── README.md                    # this file
+├── CITATION.cff                 # citation metadata (Zenodo DOI)
+├── docs/                        # conversion maps, port status, blog coverage
 ├── examples/                    # standalone usage scripts
-├── notebooks/                   # tutorial notebooks
-├── tests/                       # pytest suite
-├── validation/                  # real-JINA-XML validation script
+├── notebooks/                   # tutorial notebooks (00 ... 08)
+├── tests/                       # pytest suite + golden-output snapshots
+├── validation/                  # real-JINA-XML validation & golden generator
 └── src/nucnetpy/
     ├── core.py                  # Network, Zone containers
     ├── species.py               # Species parsing and Z/A bookkeeping
     ├── reactions.py             # Reaction, RateFit, ReactionNetwork
-    ├── solver.py                # evolution, Jacobians, thermo helpers
+    ├── solver.py                # evolution, Jacobians, thermo callables
     ├── nse.py                   # nuclear statistical equilibrium
+    ├── qse.py                   # constrained cluster equilibria (libnuceq)
+    ├── detailed_balance.py      # reverse rates and net flows
+    ├── coulomb.py               # Bravo & Garcia-Senz plasma corrections
     ├── screening.py             # electron-screening factors
     ├── weak.py                  # weak-rate tables
     ├── thermo.py                # thermodynamic helpers
-    ├── analysis.py              # analysis utilities
+    ├── analysis.py              # flows, timescales, entropy, currents, ...
     ├── validation.py            # validation / regression helpers
     ├── decay.py, hydro.py, neutrino.py, network_limiter.py,
     │   rate_modifiers.py, matrix_solver.py, mathutils.py, graph.py
+    ├── cli/                     # the `nucnetpy` command
     └── io/                      # xml.py, jina.py, text.py, hdf5.py
 ```
+
+Documentation beyond this README lives in [`docs/`](docs/README.md), including
+the [blog-workflow coverage map](docs/BLOG_COVERAGE.md) and the
+[port status / numerical-identity plan](docs/PURE_PYTHON_PORT_STATUS.md).
 
 ---
 
@@ -256,15 +281,16 @@ the same JINA/libnucnet XML data and performs equivalent network analysis and
 evolution. Exact bitwise agreement with a specific original C++ build is **not**
 guaranteed and requires project-specific regression tests against your own
 nuclear data, screening choice, and solver tolerances. A recommended validation
-order is given in [`PURE_PYTHON_PORT_STATUS.md`](PURE_PYTHON_PORT_STATUS.md).
+order — with the golden-output framework that implements it — is given in
+[`docs/PURE_PYTHON_PORT_STATUS.md`](docs/PURE_PYTHON_PORT_STATUS.md).
 
 ---
 
 ## License
 
-Research/educational Python conversion project. Before public redistribution,
-check the license terms of the original NucNet Tools project and of any
-JINA/libnucnet data files used with this package. See [`LICENSE`](LICENSE).
+[GPL-3.0-or-later](LICENSE), matching the original NucNet Tools ecosystem.
+Check the license terms of any JINA/libnucnet data files used with this
+package before redistributing them.
 
 ## Citation
 

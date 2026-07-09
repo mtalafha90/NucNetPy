@@ -9,8 +9,8 @@ abstract: >-
 type: software
 url: "https://github.com/mtalafha90/nucnetpy"
 repository-code: "https://github.com/mtalafha90/nucnetpy"
-license: "Research/educational conversion; check original NucNet Tools license before redistribution."
-version: "1.0.0a5"
+license: GPL-3.0-or-later
+version: "1.0.0"
 doi: 10.5281/zenodo.20756798
 identifiers:
   - type: doi

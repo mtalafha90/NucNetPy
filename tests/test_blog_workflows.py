@@ -1,7 +1,7 @@
 """Tests for the analysis workflows from the NucNet Tools blog.
 
 Each test corresponds to one or more posts on Bradley Meyer's SourceForge
-blog (https://sourceforge.net/u/mbradle/blog/); see BLOG_COVERAGE.md for the
+blog (https://sourceforge.net/u/mbradle/blog/); see docs/BLOG_COVERAGE.md for the
 full post-to-feature map.
 """
 import math

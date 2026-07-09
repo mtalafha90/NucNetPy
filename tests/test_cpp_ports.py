@@ -1,6 +1,6 @@
 """Tests for features ported from the NucNet Tools C++ source (r647).
 
-Covers the previously "not ported" items from BLOG_COVERAGE.md, implemented
+Covers the previously "not ported" items from docs/BLOG_COVERAGE.md, implemented
 from user/nse_corr.cpp, user/flow_utilities.cpp, and the libnuceq cluster
 workflow of examples/analysis/compare_equil.cpp.
 """
