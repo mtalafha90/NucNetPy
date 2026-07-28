@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Any
 import numpy as np
 
-from .species import Species, normalize_species_name
+from .species import Species, is_massless, normalize_species_name
 
 @dataclass(frozen=True)
 class ReactionParticipant:
@@ -95,8 +95,20 @@ class Reaction:
         return f"{_side_latex(self.reactants)} \\rightarrow {_side_latex(self.products)}"
 
     @property
+    def nuclear_reactants(self) -> List[ReactionParticipant]:
+        """Reactants that carry baryon number.
+
+        Photons and leptons are dropped: a photodisintegration such as
+        ``si28 + gamma -> mg24 + he4`` is a one-body process whose rate already
+        contains the photon density, so including ``gamma`` in the abundance
+        product would multiply every such flow by ``Y(gamma) = 0`` and would
+        raise the density power by one.
+        """
+        return [p for p in self.reactants if not is_massless(p.species)]
+
+    @property
     def reactant_order(self) -> int:
-        return sum(p.count for p in self.reactants)
+        return sum(p.count for p in self.nuclear_reactants)
 
     def bare_rate(self, t9: float, rho: float = 1.0, ye: Optional[float] = None) -> float:
         total = 0.0
@@ -119,7 +131,7 @@ class Reaction:
 
     def statistical_factor(self) -> int:
         c = Counter()
-        for p in self.reactants:
+        for p in self.nuclear_reactants:
             c[p.species] += p.count
         out = 1
         for n in c.values():
@@ -129,10 +141,16 @@ class Reaction:
     def flux(self, abundances: Mapping[str, float], t9: float, rho: float = 1.0, screening: Optional[Callable[["Reaction", float, float, Optional[float]], float]] = None, ye: Optional[float] = None) -> float:
         lam = self.rate(t9, rho=rho, ye=ye, screening=screening)
         order = self.reactant_order
-        flux = lam * (float(rho) ** max(order - 1, 0)) / max(self.statistical_factor(), 1)
-        for p in self.reactants:
-            y = max(float(abundances.get(p.species, 0.0)), 0.0)
-            flux *= y ** p.count
+        # A diverging explicit integrator can hand us arbitrarily large
+        # abundances; Python floats raise OverflowError rather than saturating,
+        # so saturate explicitly and let the caller detect the non-finite value.
+        try:
+            flux = lam * (float(rho) ** max(order - 1, 0)) / max(self.statistical_factor(), 1)
+            for p in self.nuclear_reactants:
+                y = max(float(abundances.get(p.species, 0.0)), 0.0)
+                flux *= y ** p.count
+        except OverflowError:
+            return float("inf")
         return float(flux)
 
     def stoichiometry(self) -> Dict[str, int]:
@@ -148,7 +166,14 @@ class Reaction:
         for name, coeff in self.stoichiometry().items():
             sp = species_map.get(normalize_species_name(name))
             if sp is None:
-                continue
+                # Photons and leptons carry charge and lepton bookkeeping but
+                # are not nuclides, so they need not appear in the species map.
+                # Parsing them here keeps beta decays such as
+                # ``rf310 -> db310 + electron + anti-neutrino_e`` balanced.
+                try:
+                    sp = Species.parse(name)
+                except Exception:
+                    continue
             da += coeff * sp.a
             dz += coeff * sp.z
         return (da == 0 and dz == 0), da, dz

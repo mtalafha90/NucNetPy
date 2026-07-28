@@ -31,9 +31,15 @@ reimplementation in Python on top of NumPy and SciPy.
   statistical factors, stoichiometry, reaction flows, and A/Z conservation
   checks.
 - **Evolution** — one-zone and multi-zone integration with SciPy BDF/Radau/LSODA
-  (plus fixed-step RK4 / implicit Euler fallbacks), analytic sparsity pattern and
-  numerical Jacobian, positivity projection, and screening / weak-rate hooks.
-- **NSE & QSE** — robust nuclear statistical equilibrium solve for `sum(A·Y)=1`
+  (plus fixed-step RK4 / implicit Euler fallbacks), an **analytic Jacobian** of
+  the reaction flows (one sweep over the reaction list instead of `N+1`
+  right-hand-side evaluations — ~275x faster at 100 species), positivity
+  projection, and screening / weak-rate hooks. Choose the Jacobian with
+  `evolve_zone(..., jac_mode="analytic"|"numerical"|"sparsity")`.
+- **NSE & QSE** — statistical weights use `(2J+1)·G(T)`, matching the libnucnet
+  convention in which the tabulated partition function is normalised to one at
+  low temperature; species lacking nuclear data are excluded from equilibrium
+  solves. Robust nuclear statistical equilibrium solve for `sum(A·Y)=1`
   and `sum(Z·Y)=Ye` using a numerically stable log-sum-exp formulation;
   constrained cluster equilibria (`solve_qse`, the libnuceq cluster workflow);
   optional Bravo & García-Senz **Coulomb corrections** ported from the NucNet

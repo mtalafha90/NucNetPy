@@ -34,6 +34,20 @@ SPECIAL_SPECIES = {
     "anti-neutrino_e": (0, 0),
 }
 
+#: Reaction participants that carry no baryon number.  Photons and leptons
+#: appear explicitly in JINA/libnucnet reaction records so that charge and
+#: lepton number can be checked, but they are not part of the abundance vector:
+#: the photon bath and the electron sea are properties of the thermodynamic
+#: state, and their densities are already folded into the tabulated rate.  They
+#: must therefore be excluded from the abundance product, the reactant order,
+#: and the identical-particle statistical factor of a reaction flow.
+MASSLESS_SPECIES = frozenset(SPECIAL_SPECIES)
+
+
+def is_massless(name: str) -> bool:
+    """Return True for photons and leptons, which carry no baryon number."""
+    return normalize_species_name(name) in MASSLESS_SPECIES
+
 @dataclass(frozen=True)
 class Species:
     """A nuclear species.

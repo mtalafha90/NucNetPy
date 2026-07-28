@@ -53,14 +53,24 @@ def read_jina_xml(
     _parse_species(nuc_root, net)
     _parse_reactions(reac_root, net)
 
-    # Ensure every species referenced by reactions has a nuclide entry.  If the
-    # nuclide XML is complete, this will not create anything new; if a light
-    # species alias is missing, it gives the user a useful placeholder.
+    # Ensure every species referenced by reactions has a nuclide entry.  A
+    # placeholder keeps the reaction usable for structural work, but it carries
+    # a mass excess of zero, which is not a physical value: in an equilibrium
+    # calculation a zero mass excess makes an unbound nuclide look as tightly
+    # bound as the most stable one.  Record the synthesised names so that
+    # validation can report them and the equilibrium solvers can leave them out.
+    from ..species import is_massless
+    synthesised = []
     for name in net.reactions.species_names():
+        if name in net.species or is_massless(name):
+            continue
         try:
             net.ensure_species(name)
+            synthesised.append(name)
         except Exception:
             pass
+    if synthesised:
+        net.metadata["species_without_nuclear_data"] = ",".join(sorted(synthesised))
 
     if zones_xml is not None:
         zone_root = ET.parse(zones_xml).getroot()

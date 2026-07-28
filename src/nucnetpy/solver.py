@@ -11,10 +11,21 @@ from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, 
 import numpy as np
 
 from .core import Network, Zone
-from .species import normalize_species_name
+from .species import is_massless, normalize_species_name
 
 ThermoFunction = Callable[[float, Mapping[str, float]], Tuple[float, float]]
 ScreeningFunction = Callable[[object, float, float, Optional[float]], float]
+
+#: Method names accepted by :func:`evolve_zone`, mapped to the exact spelling
+#: that ``scipy.integrate.solve_ivp`` requires.  SciPy matches these names
+#: case-sensitively, so the mapping cannot be replaced by ``str.upper``.
+_SCIPY_METHODS = {
+    "bdf": "BDF",
+    "radau": "Radau",
+    "lsoda": "LSODA",
+    "rk45": "RK45",
+    "dop853": "DOP853",
+}
 
 
 def constant_thermo(t9: float = 1.0, rho: float = 1.0) -> ThermoFunction:
@@ -121,6 +132,89 @@ def jacobian(network: Network, species: Sequence[str], thermo: ThermoFunction, s
     return j
 
 
+def analytic_jacobian(network: Network, species: Sequence[str], thermo: ThermoFunction, screening: Optional[ScreeningFunction] = None, weak_rates: Optional[Sequence[object]] = None, sparse: bool = True):
+    """Return an analytic Jacobian of the stoichiometric right-hand side.
+
+    Differentiating the flow of Eq. (flow),
+
+        F_r = (lambda_r rho^(n_r-1) / prod_i m_ir!) prod_i Y_i^{m_ir},
+
+    with respect to a reactant abundance gives
+
+        dF_r/dY_j = m_jr Y_j^{m_jr-1} (lambda_r rho^(n_r-1) / prod_i m_ir!)
+                    prod_{i != j} Y_i^{m_ir},
+
+    so that ``J_ij = sum_r nu_ir dF_r/dY_j``.  The partial product is formed
+    explicitly rather than as ``F_r m_jr / Y_j`` so that the derivative stays
+    correct when ``Y_j`` vanishes, which is the usual state of most species at
+    the start of a calculation.
+
+    The whole matrix costs one sweep over the reaction list, whereas the
+    finite-difference Jacobian of :func:`jacobian` costs ``N+1`` evaluations of
+    the full right-hand side.  The saving therefore grows linearly with the
+    number of evolved species.
+
+    ``lambda_r`` is treated as independent of composition.  With a screening
+    function or weak-rate tables that depend on ``Ye`` the result is an
+    approximate Jacobian: it changes the Newton convergence rate of an implicit
+    solver but not the solution it converges to.
+    """
+    species = [normalize_species_name(s) for s in species]
+    idx = {s: i for i, s in enumerate(species)}
+    n = len(species)
+
+    # Precompute the per-reaction index/multiplicity structure once.
+    compiled = []
+    for r in network.reactions.reactions:
+        nuclear = r.nuclear_reactants
+        reactants = [(idx[p.species], p.count) for p in nuclear if p.species in idx]
+        if len(reactants) != len(nuclear):
+            continue  # reaction touches species outside the evolved set
+        stoich = [(idx[name], nu) for name, nu in r.stoichiometry().items() if name in idx]
+        if not stoich:
+            continue
+        compiled.append((r, reactants, stoich, r.reactant_order, max(r.statistical_factor(), 1)))
+
+    def j(t: float, yvec: np.ndarray):
+        y = np.clip(np.asarray(yvec, dtype=float), 0.0, np.inf)
+        abund = {s: float(y[i]) for s, i in idx.items()}
+        t9, rho = thermo(float(t), abund)
+        ye = _ye_from_vec(species, y, network.species)
+        J = np.zeros((n, n), dtype=float)
+        for r, reactants, stoich, order, stat in compiled:
+            lam = r.rate(t9, rho=rho, ye=ye, screening=screening)
+            if lam == 0.0:
+                continue
+            pref = lam * (float(rho) ** max(order - 1, 0)) / stat
+            for pos, (jx, mj) in enumerate(reactants):
+                # d/dY_j of the reactant product, with the j-th factor replaced
+                # by m_j Y_j^{m_j - 1}.
+                term = pref * mj * (y[jx] ** (mj - 1))
+                for other, (kx, mk) in enumerate(reactants):
+                    if other != pos:
+                        term *= y[kx] ** mk
+                if term == 0.0:
+                    continue
+                for ix, nu in stoich:
+                    J[ix, jx] += nu * term
+        if weak_rates:
+            for wr in weak_rates:
+                parent = getattr(wr, 'parent', None)
+                daughter = getattr(wr, 'daughter', None)
+                if parent in idx and daughter in idx:
+                    rate = wr.rate(t9, rho * max(ye, 1e-30))
+                    J[idx[parent], idx[parent]] -= rate
+                    J[idx[daughter], idx[parent]] += rate
+        if sparse:
+            try:
+                from scipy.sparse import csc_matrix
+                return csc_matrix(J)
+            except Exception:
+                return J
+        return J
+    return j
+
+
 def jacobian_sparsity(network: Network, species: Sequence[str]):
     species = [normalize_species_name(s) for s in species]
     idx = {s: i for i, s in enumerate(species)}
@@ -138,32 +232,75 @@ def jacobian_sparsity(network: Network, species: Sequence[str]):
         return mat
 
 
-def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Optional[ThermoFunction] = None, method: str = "bdf", species: Optional[Sequence[str]] = None, screening: Optional[ScreeningFunction] = None, weak_rates: Optional[Sequence[object]] = None, rtol: float = 1e-6, atol: float = 1e-30, use_jacobian: bool = True, project_positive: bool = True) -> EvolutionResult:
+def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Optional[ThermoFunction] = None, method: str = "bdf", species: Optional[Sequence[str]] = None, screening: Optional[ScreeningFunction] = None, weak_rates: Optional[Sequence[object]] = None, rtol: float = 1e-6, atol: float = 1e-30, use_jacobian: bool = True, project_positive: bool = True, jac_mode: str = "analytic") -> EvolutionResult:
+    """Evolve one zone over ``times``.
+
+    ``jac_mode`` selects how the Jacobian is supplied to the implicit SciPy
+    solvers.  ``"analytic"`` (the default) uses :func:`analytic_jacobian`, which
+    differentiates the stoichiometric flows in closed form and costs one sweep
+    over the reaction list.  ``"numerical"`` uses the finite-difference
+    :func:`jacobian`, costing ``N+1`` right-hand-side evaluations.  ``"sparsity"``
+    supplies no Jacobian and instead passes the stoichiometric sparsity pattern
+    so that SciPy estimates the matrix by grouped finite differences.
+
+    Note that SciPy applies ``jac_sparsity`` only when no Jacobian callable is
+    given, so the pattern and an explicit Jacobian are alternatives rather than
+    complements.
+    """
     ts = np.asarray(times, dtype=float)
     if ts.ndim != 1 or len(ts) < 2:
         raise ValueError("times must be a one-dimensional array with at least two points")
+    # Photons and leptons are part of the reaction records but not of the
+    # abundance vector; evolving them would integrate a meaningless quantity.
     species = [normalize_species_name(s) for s in (species or network.species_names())]
+    species = [s for s in species if not is_massless(s)]
     y0 = np.array([zone.get_abundance(s) for s in species], dtype=float)
     thermo = thermo or zone_thermo(zone)
     f = rhs(network, species, thermo, screening=screening, weak_rates=weak_rates)
     method_l = method.lower()
-    if method_l in {"bdf", "radau", "lsoda", "rk45", "dop853"}:
+    if method_l in _SCIPY_METHODS:
         try:
             from scipy.integrate import solve_ivp
-            kwargs = dict(method=method.upper() if method_l != "lsoda" else "LSODA", rtol=rtol, atol=atol)
+            kwargs = dict(method=_SCIPY_METHODS[method_l], rtol=rtol, atol=atol)
             if use_jacobian and method_l in {"bdf", "radau"}:
-                kwargs["jac"] = jacobian(network, species, thermo, screening=screening, weak_rates=weak_rates, sparse=True)
-                kwargs["jac_sparsity"] = jacobian_sparsity(network, species)
+                mode = str(jac_mode).lower()
+                if mode == "sparsity":
+                    # No callable: SciPy groups columns of the pattern and
+                    # estimates the Jacobian by finite differences itself.
+                    kwargs["jac_sparsity"] = jacobian_sparsity(network, species)
+                elif mode == "numerical":
+                    kwargs["jac"] = jacobian(network, species, thermo, screening=screening, weak_rates=weak_rates, sparse=True)
+                else:
+                    kwargs["jac"] = analytic_jacobian(network, species, thermo, screening=screening, weak_rates=weak_rates, sparse=True)
             sol = solve_ivp(f, (ts[0], ts[-1]), y0, t_eval=ts, **kwargs)
-            y = sol.y.T
-            if project_positive:
-                y = np.clip(y, 0.0, np.inf)
-            return EvolutionResult(sol.t, species, y, bool(sol.success), str(sol.message), getattr(sol, 'nfev', 0), getattr(sol, 'njev', 0))
         except Exception as exc:
-            msg = f"SciPy {method} unavailable/failed ({exc}); used rk4 fallback"
+            # SciPy itself is unavailable or rejected the call.  A fixed-step
+            # RK4 pass keeps such environments usable, but it is an explicit
+            # method on a stiff system, so it is only reported as successful
+            # when it actually produced a finite trajectory.
             res = _fixed_step(f, y0, ts, "rk4", project_positive=project_positive)
-            return EvolutionResult(ts, species, res, True, msg)
-    return EvolutionResult(ts, species, _fixed_step(f, y0, ts, method_l, project_positive=project_positive), True, f"fixed-step {method_l}")
+            ok = bool(np.all(np.isfinite(res)))
+            msg = f"SciPy {method} unavailable ({exc}); used rk4 fallback"
+            if not ok:
+                msg += "; rk4 fallback diverged"
+            return EvolutionResult(ts, species, res, ok, msg)
+        # A stiff solve that fails may return before emitting any output, in
+        # which case sol.y is an empty list rather than an array.  Report the
+        # failure and the solver's own diagnosis instead of substituting an
+        # explicit method that cannot integrate a stiff network either.
+        y = np.asarray(sol.y, dtype=float)
+        if y.size == 0:
+            return EvolutionResult(np.asarray(sol.t, dtype=float).reshape(0), species,
+                                   np.zeros((0, len(species))), False, str(sol.message),
+                                   getattr(sol, 'nfev', 0), getattr(sol, 'njev', 0))
+        y = y.T
+        if project_positive:
+            y = np.clip(y, 0.0, np.inf)
+        return EvolutionResult(sol.t, species, y, bool(sol.success), str(sol.message), getattr(sol, 'nfev', 0), getattr(sol, 'njev', 0))
+    res = _fixed_step(f, y0, ts, method_l, project_positive=project_positive)
+    ok = bool(np.all(np.isfinite(res)))
+    msg = f"fixed-step {method_l}" + ("" if ok else " diverged (non-finite abundances)")
+    return EvolutionResult(ts, species, res, ok, msg)
 
 
 def _fixed_step(f, y0, ts, method, project_positive=True):

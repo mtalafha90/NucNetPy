@@ -59,6 +59,15 @@ def _log_prefactor(sp: Species, t9: float, rho: float, include_partition: bool =
     kt = KB_MEV * t9 * 1.0e9  # kT in MeV
     a = max(int(sp.a), 1)
     g = _partition(sp, t9) if include_partition else 1.0
+    # libnucnet/JINA files store the *normalised* partition function
+    # G(T) = Z(T)/(2J_0+1), which tends to one as T -> 0 for every nuclide.
+    # The ground-state spin degeneracy is therefore not contained in the table
+    # and has to be supplied here to build the full statistical weight
+    # Z(T) = (2J_0+1) G(T).  Omitting it biases the NSE abundance of every
+    # nuclide with non-zero ground-state spin by that factor.  A species whose
+    # spin is unknown (``None``) keeps a weight of one rather than a guess.
+    if sp.spin is not None:
+        g *= 2.0 * float(sp.spin) + 1.0
     # Quantum concentration (cm^-3) for a nucleus of mass A*m_u.  All energies
     # are in MeV and hbar*c is in MeV*cm, so the units are consistent; the
     # nucleon mass enters as its rest energy m_u c^2 = AMU_MEV, not its mass in
@@ -131,7 +140,7 @@ def _log_moments(log_pref: np.ndarray, z: np.ndarray, a: np.ndarray, mu_p: float
     return log_sum_a, weights
 
 
-def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optional[Sequence[str]] = None, include_partition: bool = True, tol: float = 1e-8, max_iter: int = 200, nse_correction=None) -> NSEResult:
+def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optional[Sequence[str]] = None, include_partition: bool = True, tol: float = 1e-8, max_iter: int = 200, nse_correction=None, require_nuclear_data: bool = True) -> NSEResult:
     """Solve an NSE composition for a network.
 
     The constraints are ``sum(A_i Y_i)=1`` and ``sum(Z_i Y_i)=Ye``.  The solve is
@@ -148,6 +157,13 @@ def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optio
     Garcia-Senz Coulomb correction.
     """
     names = [normalize_species_name(s) for s in (species or network.species_names())]
+    if require_nuclear_data:
+        # Species invented to satisfy a reaction record carry a placeholder mass
+        # excess of zero.  Including them would let an unbound nuclide compete
+        # with the iron peak, so they are dropped unless explicitly requested.
+        placeholders = set(network.species_without_nuclear_data())
+        if placeholders:
+            names = [n for n in names if n not in placeholders]
     sps = []
     for name in names:
         sp = network.species.get(name)

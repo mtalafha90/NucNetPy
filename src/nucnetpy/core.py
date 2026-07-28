@@ -91,13 +91,30 @@ class Network:
         return self.zones[index]
 
     def validate(self) -> Dict[str, object]:
+        from .species import is_massless
         missing = set()
         for r in self.reactions.reactions:
             for p in r.reactants + r.products:
-                if p.species not in self.species:
+                # Photons and leptons are reaction participants, not nuclides;
+                # their absence from the species map is expected.
+                if p.species not in self.species and not is_massless(p.species):
                     missing.add(p.species)
         invalid = self.reactions.invalid_reactions(self.species)
-        return {"missing_species": sorted(missing), "invalid_reactions": invalid, "n_species": len(self.species), "n_reactions": len(self.reactions.reactions), "n_zones": len(self.zones)}
+        return {"missing_species": sorted(missing), "invalid_reactions": invalid,
+                "species_without_nuclear_data": self.species_without_nuclear_data(),
+                "n_species": len(self.species), "n_reactions": len(self.reactions.reactions), "n_zones": len(self.zones)}
+
+    def species_without_nuclear_data(self) -> List[str]:
+        """Return species that were synthesised to satisfy a reaction record.
+
+        These are referenced by the reaction file but absent from the nuclide
+        file, so they carry a placeholder mass excess of zero rather than
+        measured or evaluated data.  They are safe for structural operations
+        such as counting or plotting the network, but must not enter an
+        equilibrium calculation, where a mass excess sets the binding energy.
+        """
+        raw = self.metadata.get("species_without_nuclear_data", "")
+        return [n for n in raw.split(",") if n]
 
     def abundance_matrix(self, species: Optional[Sequence[str]] = None) -> Tuple[List[str], np.ndarray]:
         names = [normalize_species_name(s) for s in (species or self.species_names())]
