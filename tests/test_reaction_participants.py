@@ -365,3 +365,29 @@ def test_screening_model_is_refreshed_with_the_composition():
     assert seen[0][1] == 2.0 and seen[0][2] == 1.0e5
     # and the screening factor was applied to the flow
     assert out["he4"] == pytest.approx(-2.0 * 0.25)
+
+
+def test_nuclear_energy_release_from_mass_excesses():
+    """Energy release must follow from the change in total mass excess."""
+    from nucnetpy.analysis import (nuclear_energy_generation_rate,
+                                   nuclear_energy_release)
+    from nucnetpy.constants import AVOGADRO, MEV_TO_ERG
+
+    net = Network()
+    net.add_species(Species("si28", 14, 28, mass_excess=-21.493, spin=0.0))
+    net.add_species(Species("ni56", 28, 56, mass_excess=-53.907, spin=0.0))
+    net.add_zone(Zone(abundances={"si28": 1.0 / 28.0}))
+
+    # Burning all of the silicon to nickel releases 2*ME(Si) - ME(Ni) per
+    # nickel nucleus formed.
+    released = nuclear_energy_release(net, {"si28": 1.0 / 28.0}, {"ni56": 1.0 / 56.0})
+    q = 2.0 * (-21.493) - (-53.907)
+    assert released == pytest.approx(q / 56.0 * AVOGADRO * MEV_TO_ERG, rel=1e-12)
+    assert released > 0.0
+
+    # The rate is the same quantity per unit time, so a supplied derivative
+    # integrates to the release above.
+    rate = nuclear_energy_generation_rate(
+        net, abundances={"si28": 1.0 / 28.0},
+        ydot_values={"si28": -1.0 / 28.0, "ni56": 1.0 / 56.0}, t9=5.0, rho=1e8)
+    assert rate == pytest.approx(released, rel=1e-12)

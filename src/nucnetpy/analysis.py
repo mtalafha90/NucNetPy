@@ -266,3 +266,80 @@ def integrated_currents(network: Network, result, thermo, use_reverse: bool = Tr
             rates[i] = [r.flux(abund, t9=t9, rho=rho) for r in network.reactions.reactions]
     trapezoid = getattr(np, "trapezoid", None) or np.trapz  # numpy < 2.0 compat
     return {s: float(trapezoid(rates[:, j], times)) for j, s in enumerate(strings)}
+
+
+def nuclear_energy_generation_rate(network: Network, zone_index: int = 0,
+                                   t9: Optional[float] = None,
+                                   rho: Optional[float] = None,
+                                   screening=None,
+                                   abundances: Optional[Mapping[str, float]] = None,
+                                   ydot_values: Optional[Mapping[str, float]] = None) -> float:
+    """Return the nuclear energy generation rate in erg per gram per second.
+
+    The rate follows from the change in total mass excess of the composition,
+
+        eps = -N_A sum_i (dY_i/dt) * Delta M_i,
+
+    with ``Delta M_i`` the mass excess in MeV.  This is exact, and it is
+    preferable to summing ``Q_r`` times the flow of each reaction for two
+    reasons.  It needs no Q-values, so it cannot disagree with them where a rate
+    library and a nuclide file are inconsistent, and it uses the same mass
+    excesses as the equilibrium solver, so energy release and equilibrium are
+    guaranteed to be built from one set of nuclear data.
+
+    A positive value denotes energy released to the plasma.  Neutrino losses
+    are not subtracted: energy carried away by neutrinos from weak reactions
+    must be accounted for separately.
+
+    ``abundances`` and ``ydot_values`` override the zone composition and its
+    derivative, which is useful when the rate is wanted along a trajectory that
+    has already been integrated.
+    """
+    from .constants import AVOGADRO, MEV_TO_ERG
+
+    zone = network.zone(zone_index)
+    t9 = t9 or zone.temperature9()
+    rho = rho or zone.density()
+    if abundances is None:
+        abundances = zone.abundances
+    if ydot_values is None:
+        ydot_values = network.reactions.ydot(abundances, t9=t9, rho=rho,
+                                             screening=screening)
+
+    total = 0.0
+    for name, dy in ydot_values.items():
+        sp = network.species.get(name)
+        if sp is None:
+            try:
+                sp = Species.parse(name)
+            except Exception:
+                continue
+        if sp.a <= 0:
+            continue
+        total -= float(dy) * float(sp.mass_excess)
+    return float(total * AVOGADRO * MEV_TO_ERG)
+
+
+def nuclear_energy_release(network: Network,
+                           initial: Mapping[str, float],
+                           final: Mapping[str, float]) -> float:
+    """Return the energy released between two compositions, in erg per gram.
+
+    This is the time integral of :func:`nuclear_energy_generation_rate` and
+    depends only on the endpoints, being the difference in total mass excess.
+    """
+    from .constants import AVOGADRO, MEV_TO_ERG
+
+    total = 0.0
+    for name in set(initial) | set(final):
+        sp = network.species.get(name)
+        if sp is None:
+            try:
+                sp = Species.parse(name)
+            except Exception:
+                continue
+        if sp.a <= 0:
+            continue
+        dy = float(final.get(name, 0.0)) - float(initial.get(name, 0.0))
+        total -= dy * float(sp.mass_excess)
+    return float(total * AVOGADRO * MEV_TO_ERG)

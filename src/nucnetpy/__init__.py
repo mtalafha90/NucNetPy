@@ -25,6 +25,7 @@ from .analysis import (charge_changing_flows, system_timescales, heavy_nuclei_ab
                        neutron_exposure, entropy_generation_rate, separation_energy,
                        integrated_currents, reaction_entropy_changes,
                        flows, ydot, energy_generation_rate, largest_mass_fractions,
+                       nuclear_energy_generation_rate, nuclear_energy_release,
                        element_abundances, abundance_moment, abundances_vs_nucleon_number)
 from .coulomb import (nse_correction as coulomb_nse_correction, gamma_e,
                       species_coulomb_chemical_potential, species_coulomb_energy,
