@@ -240,7 +240,9 @@ def hydrogen_burning(base_net, t9: float, rho: float, t_end: float, steps: int,
         "evolve_success": bool(result.success), "evolve_message": str(result.message),
         "nfev": int(result.nfev), "njev": int(result.njev),
     }
-    if not result.success or not len(result.y):
+    # A run that the conservation check has flagged still carries useful
+    # diagnostics, so only a run that produced no output at all is abandoned.
+    if not len(result.y):
         return record
     final = result.final_abundances
     x_final = mass_fractions(net, final)
@@ -250,6 +252,14 @@ def hydrogen_burning(base_net, t9: float, rho: float, t_end: float, steps: int,
     record["largest_final"] = sorted(
         ({"species": k, "x": float(v)} for k, v in x_final.items() if v > 1e-8),
         key=lambda d: -d["x"])[:15]
+    # How much baryon number the positivity projection had to invent.  Anything
+    # above the requested relative tolerance means the trajectory is not
+    # trustworthy, however cleanly the integrator reported finishing.
+    if "positivity projection created" in result.message:
+        record["projection_created"] = float(
+            result.message.split("positivity projection created ")[1].split()[0])
+    else:
+        record["projection_created"] = 0.0
     record["_trajectory"] = {
         "time": result.time.tolist(),
         "species": result.species,
@@ -432,6 +442,8 @@ def main() -> int:
     ap.add_argument("--h-t9", type=float, default=0.2)
     ap.add_argument("--h-rho", type=float, default=1.0e4)
     ap.add_argument("--h-t-end", type=float, default=100.0)
+    ap.add_argument("--h-t-end-long", type=float, default=1.0e6,
+                    help="second, longer hydrogen-burning integration")
     ap.add_argument("--h-zmax", type=int, default=8)
     ap.add_argument("--h-amax", type=int, default=20)
     ap.add_argument("--skip-hydrogen", action="store_true")
@@ -467,6 +479,7 @@ def main() -> int:
     print(json.dumps(tolerances, indent=2), flush=True)
 
     hydrogen = None
+    hydrogen_long = None
     if args.zone and not args.skip_hydrogen:
         print("--- hydrogen burning ---", flush=True)
         hydrogen = hydrogen_burning(base, args.h_t9, args.h_rho, args.h_t_end,
@@ -474,6 +487,12 @@ def main() -> int:
                                     1e-6, 1e-12)
         print(json.dumps({k: v for k, v in hydrogen.items() if not k.startswith("_")},
                          indent=2), flush=True)
+        print("--- hydrogen burning, long integration ---", flush=True)
+        hydrogen_long = hydrogen_burning(base, args.h_t9, args.h_rho,
+                                         args.h_t_end_long, args.steps,
+                                         args.h_zmax, args.h_amax, 1e-6, 1e-12)
+        print(json.dumps({k: v for k, v in hydrogen_long.items()
+                          if not k.startswith("_")}, indent=2), flush=True)
 
     figures = write_figures(silicon, hydrogen, outdir)
 
@@ -502,6 +521,9 @@ def main() -> int:
     if hydrogen is not None:
         payload["hydrogen_burning"] = {k: v for k, v in hydrogen.items()
                                        if not k.startswith("_")}
+    if hydrogen_long is not None:
+        payload["hydrogen_burning_long"] = {k: v for k, v in hydrogen_long.items()
+                                            if not k.startswith("_")}
     (outdir / "demonstration.json").write_text(json.dumps(payload, indent=2))
     print(f"wrote demonstration.json, LaTeX tables, and {len(figures)} figures "
           f"to {outdir}", flush=True)

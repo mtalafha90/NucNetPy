@@ -205,6 +205,37 @@ def test_failed_stiff_solve_is_reported_as_a_failure():
     assert not result.success
 
 
+def test_positivity_projection_that_creates_mass_is_reported():
+    """Clipping a genuinely negative abundance invents baryon number.
+
+    The right-hand side clips its input to non-negative values, so a component
+    that goes negative stops influencing the derivative and its Jacobian column
+    vanishes; an implicit solver can then carry it far negative while still
+    satisfying its own convergence test.  Projecting that away silently adds
+    mass, so the amount added must be measured and reported.
+    """
+    from nucnetpy.solver import _project_positive
+
+    net = Network()
+    net.add_species(Species("he4", 2, 4))
+    net.add_species(Species("c12", 6, 12))
+    species = ["he4", "c12"]
+
+    # A trajectory whose second row carries a large negative abundance.
+    y = np.array([[0.25, 0.0], [-0.25, 0.10]])
+    clipped, success, message = _project_positive(net, species, y, True, "ok")
+    assert (clipped >= 0.0).all()
+    assert not success
+    assert "positivity projection created" in message
+
+    # Round-off level negatives must not be reported as a failure.
+    y_small = np.array([[0.25, 0.0], [-1.0e-18, 0.25]])
+    _, success_small, message_small = _project_positive(
+        net, species, y_small, True, "ok")
+    assert success_small
+    assert message_small == "ok"
+
+
 def test_flux_saturates_instead_of_raising_on_overflow():
     """A diverging explicit step must not crash the right-hand side."""
     net = Network()

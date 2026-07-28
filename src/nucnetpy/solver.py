@@ -294,13 +294,54 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
                                    np.zeros((0, len(species))), False, str(sol.message),
                                    getattr(sol, 'nfev', 0), getattr(sol, 'njev', 0))
         y = y.T
+        success, message = bool(sol.success), str(sol.message)
         if project_positive:
-            y = np.clip(y, 0.0, np.inf)
-        return EvolutionResult(sol.t, species, y, bool(sol.success), str(sol.message), getattr(sol, 'nfev', 0), getattr(sol, 'njev', 0))
+            y, success, message = _project_positive(network, species, y, success, message)
+        return EvolutionResult(sol.t, species, y, success, message, getattr(sol, 'nfev', 0), getattr(sol, 'njev', 0))
     res = _fixed_step(f, y0, ts, method_l, project_positive=project_positive)
     ok = bool(np.all(np.isfinite(res)))
     msg = f"fixed-step {method_l}" + ("" if ok else " diverged (non-finite abundances)")
     return EvolutionResult(ts, species, res, ok, msg)
+
+
+#: Fraction of the initial baryon number that positivity projection may create
+#: before the trajectory is reported as untrustworthy.  Clipping round-off noise
+#: is harmless; clipping a genuinely negative abundance is not, because the
+#: baryon number it removes is invented rather than transferred.
+_PROJECTION_TOLERANCE = 1.0e-6
+
+
+def _project_positive(network: Network, species: Sequence[str], y: np.ndarray,
+                      success: bool, message: str):
+    """Clip negative abundances, reporting how much baryon number that creates.
+
+    The right-hand side clips its input to non-negative values, so once a
+    component goes negative the derivative no longer depends on it and the
+    corresponding Jacobian column vanishes.  An implicit solver can then take a
+    component far negative while still satisfying its own convergence test.
+    Projecting that away silently manufactures mass, so the amount created is
+    measured and a materially non-conservative trajectory is reported as a
+    failure rather than returned as a result.
+    """
+    from .species import Species
+    a = np.zeros(len(species), dtype=float)
+    for i, name in enumerate(species):
+        sp = network.species.get(name)
+        if sp is None:
+            try:
+                sp = Species.parse(name)
+            except Exception:
+                continue
+        a[i] = sp.a
+    clipped = np.clip(y, 0.0, np.inf)
+    created = (clipped - y) @ a
+    scale = max(float(np.abs(y[0] @ a)), 1e-30)
+    worst = float(np.max(np.abs(created))) / scale
+    if worst > _PROJECTION_TOLERANCE:
+        success = False
+        message = (f"{message}; positivity projection created {worst:.3e} of the "
+                   f"initial baryon number, so the trajectory is not trustworthy")
+    return clipped, success, message
 
 
 def _fixed_step(f, y0, ts, method, project_positive=True):
