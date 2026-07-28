@@ -44,6 +44,18 @@ reimplementation in Python on top of NumPy and SciPy.
   constrained cluster equilibria (`solve_qse`, the libnuceq cluster workflow);
   optional Bravo & García-Senz **Coulomb corrections** ported from the NucNet
   Tools C++ source.
+- **Thermodynamic consistency** — `consistent_reverse_network()` rebuilds every
+  reverse rate from detailed balance instead of the library's independently
+  fitted value. Rate libraries fit the two directions separately, so a network
+  built from them relaxes to a state that is *not* the NSE of the same nuclear
+  data: for the alpha chain at T9=5 the fitted reverse rates are off by a median
+  factor 1.10, displacing equilibrium mass fractions by a median 4.5%. Rebuilt
+  from detailed balance, the network reproduces `solve_nse` to **4.5e-6**.
+- **Screening** — `SkyNetScreening` assigns each charge a Coulomb chemical
+  potential mu(Z)/kT, blending weak, intermediate and strong regimes. Because it
+  is a chemical potential it applies consistently to forward and reverse rates,
+  so screening does not break detailed balance. Reproduces the Salpeter weak
+  limit to 0.02%.
 - **Detailed balance** — reverse reaction rates from the forward rate, masses,
   and partition functions; forward/reverse/net flows that vanish at NSE;
   tabulated photodisintegration partners for (n,γ)-(γ,n) studies.

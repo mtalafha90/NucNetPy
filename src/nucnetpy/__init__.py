@@ -9,7 +9,7 @@ from .io.jina import read_jina_xml, combine_jina_xml, jina_database_summary
 __version__ = "1.0.0"
 
 from .nse import solve_nse, NSEResult, equilibrium_ratio
-from .screening import ScreeningContext, weak_screening_factor, reaction_screening_factor, graboske_intermediate_factor
+from .screening import ScreeningContext, weak_screening_factor, reaction_screening_factor, graboske_intermediate_factor, SkyNetScreening
 from .weak import WeakRateTable, read_weak_table, compute_yedot
 from .validation import validate_network, validate_zone, regression_summary
 
@@ -20,7 +20,7 @@ from .matrix_solver import solve_linear
 from .network_limiter import limit_network, select_species
 from .neutrino import NeutrinoLuminosity, NeutrinoQuantity, geometric_flux_rate
 from .rate_modifiers import RateModifierRegistry, constant_factor, exp_temperature_factor
-from .detailed_balance import log_equilibrium_constant, reverse_rate, reverse_reaction, net_flows
+from .detailed_balance import log_equilibrium_constant, reverse_rate, reverse_reaction, net_flows, consistent_reverse_network
 from .analysis import (charge_changing_flows, system_timescales, heavy_nuclei_abundance,
                        neutron_exposure, entropy_generation_rate, separation_energy,
                        integrated_currents, reaction_entropy_changes,

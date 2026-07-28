@@ -77,6 +77,14 @@ class Reaction:
     label: str = ""
     metadata: Dict[str, str] = field(default_factory=dict)
     constant_rate: Optional[float] = None
+    #: Optional ``f(t9) -> rate`` evaluated exactly at the requested
+    #: temperature.  It is used for rates that are computed rather than fitted
+    #: or tabulated, such as the detailed-balance reverse rates built by
+    #: :func:`nucnetpy.consistent_reverse_network`, whose steep exponential
+    #: temperature dependence is poorly captured by interpolation.  A callable
+    #: cannot be written to XML, so a network containing one does not
+    #: round-trip; tabulate the rate instead when persistence is required.
+    rate_function: Optional[Callable[[float], float]] = None
 
     @classmethod
     def from_names(cls, reactants: Sequence[str], products: Sequence[str], **kwargs) -> "Reaction":
@@ -116,6 +124,8 @@ class Reaction:
             total += float(self.constant_rate)
         if self.tabular_rate is not None:
             total += self.tabular_rate.rate(t9)
+        if self.rate_function is not None:
+            total += float(self.rate_function(t9))
         for fit in self.rate_fits:
             total += fit.rate(t9)
         return float(total)
@@ -178,6 +188,21 @@ class Reaction:
             dz += coeff * sp.z
         return (da == 0 and dz == 0), da, dz
 
+def _refresh_screening(screening, abundances: Mapping[str, float], t9: float,
+                       rho: float, ye: Optional[float]) -> None:
+    """Give a composition-dependent screening model the current state.
+
+    The per-reaction screening callback receives only the reaction and the
+    thermodynamic state, but a plasma screening model also needs the
+    composition.  A model that exposes an ``update`` method is refreshed once
+    here, before the loop over reactions, so the cost is paid once per
+    right-hand-side evaluation rather than once per reaction.
+    """
+    update = getattr(screening, "update", None)
+    if update is not None:
+        update(abundances, t9, rho, ye)
+
+
 @dataclass
 class ReactionNetwork:
     reactions: List[Reaction] = field(default_factory=list)
@@ -208,9 +233,11 @@ class ReactionNetwork:
         return {r.string: r.rate(t9, rho=rho) for r in self.reactions}
 
     def flows(self, abundances: Mapping[str, float], t9: float, rho: float = 1.0, screening: Optional[Callable[[Reaction, float, float, Optional[float]], float]] = None, ye: Optional[float] = None) -> Dict[str, float]:
+        _refresh_screening(screening, abundances, t9, rho, ye)
         return {r.string: r.flux(abundances, t9=t9, rho=rho, screening=screening, ye=ye) for r in self.reactions}
 
     def ydot(self, abundances: Mapping[str, float], t9: float, rho: float = 1.0, screening: Optional[Callable[[Reaction, float, float, Optional[float]], float]] = None, ye: Optional[float] = None) -> Dict[str, float]:
+        _refresh_screening(screening, abundances, t9, rho, ye)
         out: Dict[str, float] = defaultdict(float)
         for r in self.reactions:
             f = r.flux(abundances, t9=t9, rho=rho, screening=screening, ye=ye)

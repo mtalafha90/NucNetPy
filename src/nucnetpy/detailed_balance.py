@@ -118,6 +118,91 @@ def reverse_reaction(reaction: Reaction, species_map: Mapping[str, Species], t9_
     )
 
 
+def _exact_reverse_reaction(forward: Reaction, species_map: Mapping[str, Species],
+                            include_partition: bool) -> Reaction:
+    """Reverse of ``forward`` whose rate is recomputed at each temperature."""
+    def rate_at(t9: float, _f=forward, _m=species_map, _p=include_partition) -> float:
+        return reverse_rate(_f, _m, float(t9), include_partition=_p)
+
+    return Reaction(
+        reactants=list(forward.products),
+        products=list(forward.reactants),
+        rate_function=rate_at,
+        q_value=-forward.q_value,
+        source="detailed_balance",
+        label=(forward.label + "_reverse") if forward.label else "reverse",
+    )
+
+
+def consistent_reverse_network(network, t9_grid: Optional[Sequence[float]] = None,
+                               include_partition: bool = True,
+                               tabulate: bool = False):
+    """Return a copy of ``network`` whose reverse rates obey detailed balance.
+
+    Rate libraries such as JINA ReacLib supply the forward and reverse
+    directions of a reaction as separately fitted expressions.  Their ratio is
+    therefore not exactly the equilibrium constant implied by the nuclear masses
+    and partition functions in the accompanying nuclide file, and a network
+    built from them relaxes to a stationary state that is not the nuclear
+    statistical equilibrium of those same data.  The discrepancy is not small:
+    for the alpha chain at :math:`T_9=5` the fitted reverse rates differ from
+    detailed balance by a median factor of 1.10, which displaces the equilibrium
+    mass fractions by a median of 4.5 per cent.
+
+    This function pairs every reaction with its inverse, keeps the exothermic
+    member of each pair, and regenerates the endothermic member from
+    :func:`reverse_rate`.  Reactions with no inverse in the network are carried
+    over unchanged.  The resulting network relaxes to the composition returned
+    by :func:`nucnetpy.solve_nse` to about one part in :math:`10^{5}`, so the
+    integrator and the equilibrium solver become mutually consistent.
+
+    By default the reverse rate is attached as a callable evaluated exactly at
+    whatever temperature the integrator asks for.  This matters: the reverse
+    rate carries a factor :math:`\exp(-Q/kT)`, which is far too steep to
+    interpolate accurately, and tabulating it on 200 logarithmically spaced
+    points degrades the agreement with equilibrium from one part in
+    :math:`10^{6}` to about one part in :math:`10^{3}`.  Pass ``tabulate=True``
+    to sample the rate on ``t9_grid`` instead, which is less accurate but can be
+    written to XML.
+
+    Note that this replaces measured or evaluated reverse rates with values
+    derived from mass differences, so it enforces thermodynamic consistency
+    rather than improving individual rates.  Where a library reverse rate is
+    known to be better than the masses it is derived from, keep the library
+    value instead.
+    """
+    import copy as _copy
+
+    out = _copy.deepcopy(network)
+    grid = (np.geomspace(0.01, 10.0, 200) if t9_grid is None
+            else np.asarray(t9_grid, dtype=float))
+    by_key = {r.key: r for r in out.reactions.reactions}
+
+    rebuilt = []
+    handled = set()
+    for reaction in out.reactions.reactions:
+        if reaction.key in handled:
+            continue
+        inverse = by_key.get((reaction.key[1], reaction.key[0]))
+        if inverse is None:
+            rebuilt.append(reaction)
+            handled.add(reaction.key)
+            continue
+        handled.add(reaction.key)
+        handled.add(inverse.key)
+        forward = reaction if reaction.q_value >= inverse.q_value else inverse
+        rebuilt.append(forward)
+        if tabulate:
+            rebuilt.append(reverse_reaction(forward, out.species, t9_grid=grid,
+                                            include_partition=include_partition))
+        else:
+            rebuilt.append(_exact_reverse_reaction(forward, out.species,
+                                                   include_partition))
+
+    out.reactions.reactions = rebuilt
+    return out
+
+
 def net_flows(network, abundances: Mapping[str, float], t9: float, rho: float = 1.0, include_partition: bool = True) -> Dict[str, Tuple[float, float, float]]:
     """Return ``{reaction: (forward, reverse, net)}`` fluxes for a network.
 

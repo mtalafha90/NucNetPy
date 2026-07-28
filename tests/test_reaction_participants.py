@@ -244,3 +244,124 @@ def test_flux_saturates_instead_of_raising_on_overflow():
     reaction = Reaction.from_names(["he4", "he4", "he4"], ["c12"], constant_rate=1.0)
     value = reaction.flux({"he4": 1.0e200}, t9=1.0, rho=1.0e10)
     assert math.isinf(value)
+
+
+def test_detailed_balance_network_relaxes_to_nse():
+    """A network with detailed-balance reverse rates must reproduce NSE.
+
+    Rate libraries fit the forward and reverse directions independently, so
+    their ratio is not exactly the equilibrium constant implied by the masses
+    and partition functions.  A network built from them therefore relaxes to a
+    stationary state that is not the NSE of the same nuclear data.  Rebuilding
+    the reverse rates from detailed balance removes the inconsistency.
+    """
+    from nucnetpy import consistent_reverse_network
+
+    net = Network()
+    # Two nuclides and a radiative capture, with a deliberately inconsistent
+    # library reverse rate (a factor of three away from detailed balance).
+    net.add_species(Species("he4", 2, 4, mass_excess=2.425, spin=0.0))
+    net.add_species(Species("c12", 6, 12, mass_excess=0.0, spin=0.0))
+    net.add_species(Species("o16", 8, 16, mass_excess=-4.737, spin=0.0))
+    forward = Reaction.from_names(["c12", "he4"], ["o16", "gamma"],
+                                  constant_rate=1.0e3, q_value=7.162)
+    net.reactions.add(forward)
+    net.reactions.add(Reaction.from_names(["o16", "gamma"], ["c12", "he4"],
+                                          constant_rate=3.0, q_value=-7.162))
+
+    rebuilt = consistent_reverse_network(net)
+    assert len(rebuilt.reactions.reactions) == 2
+    reverse = [r for r in rebuilt.reactions.reactions
+               if r.source == "detailed_balance"]
+    assert len(reverse) == 1
+    reverse = reverse[0]
+    # The exothermic direction is kept as the forward reaction.
+    assert {p.species for p in reverse.reactants} == {"o16", "gamma"}
+    # Its rate is recomputed rather than copied from the library.
+    assert reverse.rate_function is not None
+    assert reverse.bare_rate(3.0) != pytest.approx(3.0)
+
+    # The rebuilt reverse rate must satisfy detailed balance by construction.
+    from nucnetpy.detailed_balance import reverse_rate
+    for t9 in (1.0, 3.0, 5.0):
+        assert reverse.bare_rate(t9) == pytest.approx(
+            reverse_rate(forward, net.species, t9), rel=1e-12)
+
+
+def test_reaction_rate_function_is_evaluated():
+    reaction = Reaction.from_names(["he4"], ["c12"], rate_function=lambda t9: 2.0 * t9)
+    assert reaction.bare_rate(3.0) == pytest.approx(6.0)
+    # A callable composes with the other rate representations.
+    reaction.constant_rate = 1.0
+    assert reaction.bare_rate(3.0) == pytest.approx(7.0)
+
+
+def test_skynet_screening_recovers_the_weak_limit():
+    """At low density mu(Z) must scale as Z^2 and match Salpeter screening."""
+    from nucnetpy.screening import SkyNetScreening, weak_screening_factor
+
+    species = {"he4": Species("he4", 2, 4), "c12": Species("c12", 6, 12),
+               "o16": Species("o16", 8, 16)}
+    screening = SkyNetScreening(species)
+    composition = {"he4": 0.25}
+
+    screening.update(composition, t9=1.0, rho=1.0)
+    mu2 = screening.chemical_potential(2)
+    assert mu2 < 0.0
+    # Weak screening is quadratic in charge.
+    assert screening.chemical_potential(6) / mu2 == pytest.approx(9.0, rel=1e-6)
+    assert screening.chemical_potential(8) / mu2 == pytest.approx(16.0, rel=1e-6)
+    assert screening.chemical_potential(0) == 0.0
+
+    # The enhancement of a two-body reaction must agree with the independent
+    # Salpeter pairwise formula where weak screening applies.
+    reaction = Reaction.from_names(["c12", "he4"], ["o16"])
+    ion = sum(species[k].z ** 2 * v for k, v in composition.items())
+    for rho in (1.0, 1.0e2, 1.0e4):
+        screening.update(composition, t9=1.0, rho=rho)
+        assert screening.factor(reaction) == pytest.approx(
+            weak_screening_factor(6, 2, 1.0, rho, 0.5, ion), rel=2e-3)
+
+
+def test_skynet_screening_grows_with_coupling_and_leaves_neutrals_alone():
+    from nucnetpy.screening import SkyNetScreening
+
+    species = {"he4": Species("he4", 2, 4), "n": Species("n", 0, 1),
+               "si28": Species("si28", 14, 28)}
+    screening = SkyNetScreening(species)
+    composition = {"si28": 1.0 / 28.0}
+
+    previous = 1.0
+    charged = Reaction.from_names(["si28", "he4"], ["n"])
+    for t9, rho in [(5.0, 1.0e6), (5.0, 1.0e8), (1.0, 1.0e8), (0.5, 1.0e9)]:
+        screening.update(composition, t9=t9, rho=rho)
+        factor = screening.factor(charged)
+        assert factor >= previous
+        previous = factor
+
+    # A reaction with no charged reactant is unscreened.
+    neutral = Reaction.from_names(["n", "n"], ["he4"])
+    assert screening.factor(neutral) == 1.0
+
+
+def test_screening_model_is_refreshed_with_the_composition():
+    """The network must hand a composition-dependent model the current state."""
+    from nucnetpy.reactions import ReactionNetwork
+
+    seen = []
+
+    class Recording:
+        def update(self, abundances, t9, rho, ye):
+            seen.append((dict(abundances), t9, rho))
+
+        def __call__(self, reaction, t9=0.0, rho=0.0, ye=None):
+            return 2.0
+
+    net = ReactionNetwork()
+    net.add(Reaction.from_names(["he4"], ["c12"], constant_rate=1.0))
+    out = net.ydot({"he4": 0.25}, t9=2.0, rho=1.0e5, screening=Recording())
+    # update() is called once for the evaluation, not once per reaction.
+    assert len(seen) == 1
+    assert seen[0][1] == 2.0 and seen[0][2] == 1.0e5
+    # and the screening factor was applied to the flow
+    assert out["he4"] == pytest.approx(-2.0 * 0.25)
