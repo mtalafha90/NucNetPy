@@ -1,0 +1,71 @@
+<?xml version='1.0' encoding='utf-8'?>
+<nucnetpy>
+  <nuclear_data>
+    <nuclide>
+      <z>2</z>
+      <a>4</a>
+      <source>ame</source>
+      <mass_excess>2.4249149999999999</mass_excess>
+      <spin>0</spin>
+    </nuclide>
+    <nuclide>
+      <z>6</z>
+      <a>12</a>
+      <source>ame</source>
+      <mass_excess>0</mass_excess>
+      <spin>0</spin>
+      <partf_table>
+        <point>
+          <t9>1</t9>
+          <partf>1</partf>
+        </point>
+        <point>
+          <t9>10</t9>
+          <partf>1.5848931924611136</partf>
+        </point>
+      </partf_table>
+    </nuclide>
+    <nuclide>
+      <z>8</z>
+      <a>16</a>
+      <source>ame</source>
+      <mass_excess>-4.7370000000000001</mass_excess>
+      <spin>0</spin>
+    </nuclide>
+  </nuclear_data>
+  <reaction_data>
+    <reaction>
+      <source>demo</source>
+      <reactant>c12</reactant>
+      <reactant>he4</reactant>
+      <product>gamma</product>
+      <product>o16</product>
+      <non_smoker_fit source="demo">
+        <a1>10</a1>
+        <a2>0</a2>
+        <a3>0</a3>
+        <a4>0</a4>
+        <a5>0</a5>
+        <a6>0</a6>
+        <a7>0</a7>
+      </non_smoker_fit>
+    </reaction>
+    <reaction>
+      <source>demo</source>
+      <reactant>gamma</reactant>
+      <reactant>o16</reactant>
+      <product>c12</product>
+      <product>he4</product>
+      <non_smoker_fit source="demo">
+        <a1>5</a1>
+        <a2>0</a2>
+        <a3>0</a3>
+        <a4>0</a4>
+        <a5>0</a5>
+        <a6>0</a6>
+        <a7>0</a7>
+      </non_smoker_fit>
+    </reaction>
+  </reaction_data>
+  <zone_data />
+</nucnetpy>

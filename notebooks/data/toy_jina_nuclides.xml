@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<nuclear_data>
+  <nuclide>
+    <z>2</z><a>4</a><source>ame</source>
+    <mass_excess>2.424915</mass_excess><spin>0</spin>
+  </nuclide>
+  <nuclide>
+    <z>6</z><a>12</a><source>ame</source>
+    <mass_excess>0.0</mass_excess><spin>0</spin>
+    <partf_table>
+      <point><t9>1.0</t9><log10_partf>0.0</log10_partf></point>
+      <point><t9>10.0</t9><log10_partf>0.2</log10_partf></point>
+    </partf_table>
+  </nuclide>
+  <nuclide>
+    <z>8</z><a>16</a><source>ame</source>
+    <mass_excess>-4.737</mass_excess><spin>0</spin>
+  </nuclide>
+</nuclear_data>

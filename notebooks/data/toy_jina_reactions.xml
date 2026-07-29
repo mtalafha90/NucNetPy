@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<reaction_data>
+  <reaction>
+    <source>demo</source>
+    <reactant>c12</reactant><reactant>he4</reactant>
+    <product>o16</product><product>gamma</product>
+    <non_smoker_fit>
+      <a1>10.0</a1><a2>0.0</a2><a3>0.0</a3><a4>0.0</a4>
+      <a5>0.0</a5><a6>0.0</a6><a7>0.0</a7><a8>0.0</a8>
+    </non_smoker_fit>
+  </reaction>
+  <reaction>
+    <source>demo</source>
+    <reactant>o16</reactant><reactant>gamma</reactant>
+    <product>c12</product><product>he4</product>
+    <non_smoker_fit>
+      <a1>5.0</a1><a2>0.0</a2><a3>0.0</a3><a4>0.0</a4>
+      <a5>0.0</a5><a6>0.0</a6><a7>0.0</a7><a8>0.0</a8>
+    </non_smoker_fit>
+  </reaction>
+</reaction_data>

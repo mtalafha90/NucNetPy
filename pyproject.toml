@@ -35,6 +35,9 @@ DOI = "https://doi.org/10.5281/zenodo.20756798"
 hdf5 = ["h5py>=3.8"]
 plot = ["matplotlib>=3.6", "networkx>=2.8"]
 dev = ["pytest>=7"]
+# Everything the tutorial notebooks import.  pandas is used only to display
+# tables; the package itself never imports it.
+notebook = ["jupyter>=1.0", "matplotlib>=3.6", "pandas>=1.5"]
 
 [project.scripts]
 nucnetpy = "nucnetpy.cli:main"
