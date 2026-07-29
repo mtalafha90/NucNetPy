@@ -38,6 +38,9 @@ dev = ["pytest>=7"]
 # Everything the tutorial notebooks import.  pandas is used only to display
 # tables; the package itself never imports it.
 notebook = ["jupyter>=1.0", "matplotlib>=3.6", "pandas>=1.5"]
+# Building the user manual in docs/manual.  rinohtype renders the PDF without
+# needing a LaTeX installation.
+docs = ["sphinx>=7", "furo", "myst-parser", "rinohtype"]
 
 [project.scripts]
 nucnetpy = "nucnetpy.cli:main"

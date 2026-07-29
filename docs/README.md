@@ -1,5 +1,29 @@
 # NucNetPy documentation
 
+## User manual
+
+The user manual is the place to start. It covers installation, the object
+model, the common workflows, the pitfalls that produce plausible but wrong
+answers, how to verify a calculation, and a full API and command-line
+reference generated from the source.
+
+| Form | Location |
+|---|---|
+| PDF | [`manual/nucnetpy-manual.pdf`](manual/nucnetpy-manual.pdf) |
+| Sources | [`manual/`](manual/) |
+
+Rebuild it after changing the code or the docstrings:
+
+```bash
+python -m pip install -e ".[docs]"
+make -C docs/manual all      # html, singlehtml and pdf
+```
+
+The PDF is produced by rinohtype and needs no LaTeX installation.
+
+## Developer notes
+
+
 | Document | Contents |
 |---|---|
 | [BLOG_COVERAGE.md](BLOG_COVERAGE.md) | Map of every NucNet Tools blog workflow to its nucnetpy feature, including the items ported directly from the C++ source (r647) and what remains open |
