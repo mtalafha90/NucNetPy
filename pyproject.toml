@@ -6,9 +6,13 @@ build-backend = "setuptools.build_meta"
 name = "nucnetpy"
 version = "1.0.0"
 description = "Pure-Python nuclear reaction networks: a replacement for NucNet Tools workflows"
-readme = "README.md"
+readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.9"
-authors = [{name = "NucNetPy Developers"}]
+authors = [
+    {name = "Mohammed H. Talafha", email = "mtalafha901@gmail.com"},
+    {name = "Nidal M. Ershaidat", email = "N.Ershaidat@ju.edu.jo"},
+]
+maintainers = [{name = "Mohammed H. Talafha", email = "mtalafha901@gmail.com"}]
 license = {text = "GPL-3.0-or-later"}
 keywords = [
     "nucleosynthesis", "nuclear-astrophysics", "reaction-network",
@@ -20,6 +24,12 @@ classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: Astronomy",
     "Topic :: Scientific/Engineering :: Physics",
 ]
@@ -28,6 +38,7 @@ dependencies = ["numpy>=1.22", "scipy>=1.9"]
 [project.urls]
 Homepage = "https://github.com/mtalafha90/NucNetPy"
 Repository = "https://github.com/mtalafha90/NucNetPy"
+Documentation = "https://github.com/mtalafha90/NucNetPy/blob/main/docs/manual/nucnetpy-manual.pdf"
 Issues = "https://github.com/mtalafha90/NucNetPy/issues"
 DOI = "https://doi.org/10.5281/zenodo.20756798"
 
@@ -44,6 +55,9 @@ docs = ["sphinx>=7", "furo", "myst-parser", "rinohtype"]
 
 [project.scripts]
 nucnetpy = "nucnetpy.cli:main"
+
+[tool.setuptools]
+license-files = ["LICENSE"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

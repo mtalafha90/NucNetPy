@@ -1,0 +1,19 @@
+# Files to ship in the source distribution beyond the package itself.
+# The sdist is what a reviewer or an archive receives, so it carries the tests,
+# the reproducibility scripts, the tutorials and the manual.
+
+include LICENSE
+include CITATION.cff
+include README.md
+include pyproject.toml
+
+recursive-include tests *.py *.json *.xml *.txt *.csv
+recursive-include validation *.py
+recursive-include examples *.py
+recursive-include notebooks *.ipynb *.md *.xml *.txt *.csv
+recursive-include docs *.md *.pdf
+recursive-include docs/manual Makefile conf.py
+
+# Never ship build artefacts or caches.
+prune docs/manual/_build
+global-exclude *.py[cod] __pycache__/* .DS_Store
