@@ -45,12 +45,12 @@ are omitted.
 | **Adding fission to an r-process calculation** | **`fission_reaction` (new)** |
 | Running an r-process calculation | `evolve_zone` + JINA XML network |
 | (n,γ)-(γ,n) equilibrium studies | **`reverse_reaction`** to build photodisintegration partners; `solve_nse` |
-| Creating flow diagrams (colors, scalings, currents) | `graph.reaction_network_dot`, CLI `net-dot` (basic) |
+| Creating flow diagrams (colours, scalings, currents) | `graph.reaction_network_dot`, CLI `net-dot` (basic) |
 | Creating webnucleo reaction XML from text with Python | `read_reaclib_text`, `io.text`, `write_xml` |
 | Using zone properties; global strings | `Zone.properties`, `Network.metadata` |
 | Selecting a zone as input for a new calculation | CLI `export-zone-xml` |
 | Controlling the frequency of writing output | `times` grid passed to `evolve_zone` |
-| Using wnutils to analyze output | `analysis` module + `io.hdf5` |
+| Using wnutils to analyse output | `analysis` module + `io.hdf5` |
 | Weak decays / entropy for weak decay | `weak` tables + `charge_changing_flows` |
 | Updating mass excesses in a nuclide XML | edit `Species.mass_excess`, re-`write_xml` |
 | Counting matrix elements; arrow matrix storage | `jacobian_sparsity` (SciPy sparse replaces arrow solver) |

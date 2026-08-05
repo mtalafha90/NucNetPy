@@ -79,8 +79,8 @@ reimplementation in Python on top of NumPy and SciPy.
 ## Installation
 
 ```bash
-git clone https://github.com/mtalafha90/nucnetpy.git
-cd nucnetpy
+git clone https://github.com/mtalafha90/NucNetPy.git
+cd NucNetPy
 python -m pip install -e .
 ```
 
@@ -157,7 +157,7 @@ nuclides.xml   reaction_data.xml   zone.xml
 ### Command line
 
 ```bash
-# Summarize a JINA database (species / reactions / zones / validity)
+# Summarise a JINA database (species / reactions / zones / validity)
 nucnetpy jina-summary nuclides.xml reaction_data.xml --zones-xml zone.xml
 
 # Combine separate files into one network file most commands consume
@@ -183,9 +183,9 @@ for name, y in sorted(zone.abundances.items()):
 
 ---
 
-## Two things that catch people out
+## Three things that catch people out
 
-Neither announces itself with an error message, so both are worth knowing before
+None announces itself with an error message, so all are worth knowing before
 your first production run.
 
 ### Keep `gamma` when you cut a network
@@ -228,6 +228,24 @@ consistent = consistent_reverse_network(net)   # tabulate=True to keep it writab
 It is an option rather than a default: deriving reverse rates from mass
 differences enforces consistency, but discards whatever measurement went into
 the library's reverse fit. Notebook 09 measures both sides of the trade-off.
+
+### A zone keeps its file metadata in `optional_properties`
+
+A libnucnet zone file wraps its metadata in `<optional_properties>`, and the
+reader keeps that in `zone.optional_properties`. `zone.properties` holds only
+properties written directly on the `<zone>` element, which for most real files
+is nothing at all:
+
+```python
+zone = net.zone(0)
+zone.properties           # {} for a typical JINA zone file
+zone.optional_properties  # {'tend': '3.15e07', 'dt': '1.e-5', ...}
+```
+
+Code that reads `zone.properties.get("t9_0", 0.2)` therefore takes the default
+without complaining, and the run proceeds at the wrong temperature. Consult
+both, as `Zone.temperature9()` and `Zone.density()` do, or read
+`optional_properties` directly. `examples/run_single_zone.py` shows the pattern.
 
 ---
 
@@ -370,7 +388,7 @@ See [`notebooks/README.md`](notebooks/README.md) for details.
 ## Repository structure
 
 ```text
-nucnetpy/
+NucNetPy/
 ├── pyproject.toml
 ├── README.md                    # this file
 ├── CITATION.cff                 # citation metadata (Zenodo DOI)
@@ -394,7 +412,8 @@ nucnetpy/
     ├── analysis.py              # flows, timescales, entropy, currents, ...
     ├── validation.py            # validation / regression helpers
     ├── decay.py, hydro.py, neutrino.py, network_limiter.py,
-    │   rate_modifiers.py, matrix_solver.py, mathutils.py, graph.py
+    │   rate_modifiers.py, matrix_solver.py, mathutils.py,
+    │   constants.py, graph.py
     ├── cli/                     # the `nucnetpy` command
     └── io/                      # xml.py, jina.py, text.py, hdf5.py
 ```
@@ -441,9 +460,14 @@ JINA reaction-rate database that provides the nuclear data.
 
 ```bibtex
 @software{nucnetpy,
-  title  = {NucNetPy: a pure-Python nuclear reaction-network package},
-  url    = {https://github.com/mtalafha90/nucnetpy},
-  doi    = {10.5281/zenodo.20756798},
-  year   = {2026}
+  author  = {Talafha, Mohammed H. and Ershaidat, Nidal M.},
+  title   = {NucNetPy: a pure-Python nuclear reaction-network package},
+  version = {1.0.0},
+  url     = {https://github.com/mtalafha90/NucNetPy},
+  doi     = {10.5281/zenodo.20756798},
+  year    = {2026}
 }
 ```
+
+`CITATION.cff` carries the same metadata in machine-readable form; GitHub and
+Zenodo both read it, so it is the authoritative copy.

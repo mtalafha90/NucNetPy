@@ -1,10 +1,10 @@
 # Pure Python port status
 
-The C++ source contains helper files under `nnt/` and `user/`. This alpha adds Python equivalents for the practical computational layers rather than a backend wrapper.
+The C++ source contains helper files under `nnt/` and `user/`. NucNetPy provides Python equivalents for the practical computational layers rather than a wrapper around a compiled backend.
 
 | Original area | Python module | Status |
 |---|---|---|
-| `nnt/math.*` | `nucnetpy.mathutils` | Ported: linear, bilinear, 2-D interpolation behavior |
+| `nnt/math.*` | `nucnetpy.mathutils` | Ported: linear, bilinear, 2-D interpolation behaviour |
 | wrappers/containers | `core.py`, `species.py` | Ported core containers |
 | network/reaction utilities | `reactions.py`, `validation.py` | Ported main rate/flow/conservation APIs |
 | `screen.*` | `screening.py` | Pure-Python weak and intermediate screening; exact formula variants still need golden validation |

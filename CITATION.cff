@@ -7,8 +7,23 @@ abstract: >-
   JINA/libnucnet XML databases, evaluating reaction rates and flows, solving
   nuclear statistical equilibrium, and integrating single-zone network evolution.
 type: software
-url: "https://github.com/mtalafha90/nucnetpy"
-repository-code: "https://github.com/mtalafha90/nucnetpy"
+authors:
+  - family-names: Talafha
+    given-names: "Mohammed H."
+    email: mtalafha901@gmail.com
+    orcid: "https://orcid.org/0000-0003-4671-1759"
+    affiliation: >-
+      Research Institute of Sciences and Engineering, University of Sharjah,
+      Sharjah, United Arab Emirates
+  - family-names: Ershaidat
+    given-names: "Nidal M."
+    email: N.Ershaidat@ju.edu.jo
+    orcid: "https://orcid.org/0000-0002-8953-5209"
+    affiliation: >-
+      Department of Physics, Faculty of Science, The University of Jordan,
+      Amman, Jordan
+url: "https://github.com/mtalafha90/NucNetPy"
+repository-code: "https://github.com/mtalafha90/NucNetPy"
 license: GPL-3.0-or-later
 version: "1.0.0"
 doi: 10.5281/zenodo.20756798
@@ -16,3 +31,9 @@ identifiers:
   - type: doi
     value: 10.5281/zenodo.20756798
     description: Zenodo archive of NucNetPy
+keywords:
+  - nucleosynthesis
+  - nuclear astrophysics
+  - reaction network
+  - nuclear statistical equilibrium
+  - computational physics

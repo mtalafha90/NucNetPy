@@ -10,7 +10,7 @@ OUT_OF_TABLE_DIFF = 9999.0
 def linear_interpolation(x: Sequence[float], y: Sequence[float], x0: float) -> float:
     """C++ compatible clamped 1-D interpolation.
 
-    Matches the behavior of nnt::linear_interpolation: values below the first
+    Matches the behaviour of nnt::linear_interpolation: values below the first
     grid point return y[0], values at/above the last point return y[-1].
     """
     xv = np.asarray(x, dtype=float)
@@ -48,7 +48,7 @@ def bilinear_interpolation(x1: Sequence[float], x2: Sequence[float], matrix, v1:
 def two_d_interpolation(x1: Sequence[float], x2: Sequence[float], matrix, v1: float, v2: float) -> Tuple[float, float]:
     """2-D interpolation with boundary clamping.
 
-    This mirrors the public behavior of the NucNet helper: interpolate inside
+    This mirrors the public behaviour of the NucNet helper: interpolate inside
     the table, extrapolate/clamp on edges, and report ``9999`` as uncertainty
     when the requested point lies outside the available grid.
     """

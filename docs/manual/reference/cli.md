@@ -17,7 +17,7 @@ positional arguments:
     timescales          shortest species timescales Y/|dY/dt|
     entropy-generation  dS/dt per nucleon in k_B/s
     qse                 constrained cluster equilibrium (libnuceq)
-    jina-summary        summarize separate JINA nuclide and reaction XML files
+    jina-summary        summarise separate JINA nuclide and reaction XML files
     jina-combine        combine JINA nuclide and reaction XML files into one
                         nucnetpy XML file
 

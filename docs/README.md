@@ -31,7 +31,12 @@ The PDF is produced by rinohtype and needs no LaTeX installation.
 | [JINA_XML_WORKFLOW.md](JINA_XML_WORKFLOW.md) | Working with separate JINA nuclide/reaction/zone XML files |
 | [PURE_PYTHON_PORT_STATUS.md](PURE_PYTHON_PORT_STATUS.md) | Port status per C++ area and the golden-output numerical-identity test framework |
 | [EXACT_NUMERICAL_IDENTITY.md](EXACT_NUMERICAL_IDENTITY.md) | Notes on achieving strict numerical identity with a specific C++ build |
-| [REAL_JINA_FILES_UPDATE.md](REAL_JINA_FILES_UPDATE.md), [REAL_XML_VALIDATION_REPORT.md](REAL_XML_VALIDATION_REPORT.md) | Historical validation reports against real JINA XML databases |
+
+To validate against a production JINA database of your own, run
+`validation/validate_real_jina_xml.py`; it prints the same summary these notes
+describe and writes a JSON record. Notebook
+[`08_validate_real_jina_files.ipynb`](../notebooks/08_validate_real_jina_files.ipynb)
+walks through the same check interactively.
 
 The main [README](../README.md) covers installation, quick start, and the CLI.
 Tutorial notebooks live in [`notebooks/`](../notebooks/).

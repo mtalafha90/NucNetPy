@@ -16,7 +16,7 @@
 | Multi-zone evolution | `evolve_network_zones` |
 | HDF5 helper workflow | `nucnetpy.io.hdf5` |
 
-## What is implemented in alpha 2
+## What is implemented
 
 - Flexible XML parsing for common legacy structures and compact Python-written XML.
 - Partition functions and optional properties are preserved.

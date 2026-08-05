@@ -65,7 +65,7 @@ class WeakRateTable:
 
 
 def read_weak_table(path: str | Path, parent: Optional[str] = None, daughter: Optional[str] = None) -> WeakRateTable:
-    """Read a normalized weak-rate table.
+    """Read a normalised weak-rate table.
 
     Accepted format::
 

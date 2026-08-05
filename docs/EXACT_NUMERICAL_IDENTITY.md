@@ -2,7 +2,7 @@
 
 A pure Python rewrite cannot honestly promise exact numerical identity with the
 original C++ NucNet Tools by itself.  Identity depends on the original C/C++
-source, libnucnet/libnuceq/statmech versions, GSL/libxml2 behavior, compiler,
+source, libnucnet/libnuceq/statmech versions, GSL/libxml2 behaviour, compiler,
 optimization flags, reaction ordering, matrix solver details, and floating-point
 rounding.
 

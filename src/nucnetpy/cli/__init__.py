@@ -258,7 +258,7 @@ def build_parser():
     s = sub.add_parser('nse'); add_xml(s); s.add_argument('--t9', type=float, required=True); s.add_argument('--rho', type=float, required=True); s.add_argument('--ye', type=float, required=True); s.add_argument('--coulomb', action='store_true', help='apply Bravo & Garcia-Senz Coulomb corrections'); s.add_argument('--min-abundance', type=float, default=0.0); s.add_argument('--min-x', type=float, default=0.0); s.set_defaults(func=cmd_nse)
     s = sub.add_parser('qse', help='constrained cluster equilibrium (libnuceq)'); add_xml(s); s.add_argument('--t9', type=float, required=True); s.add_argument('--rho', type=float, required=True); s.add_argument('--ye', type=float, required=True); s.add_argument('--cluster', action='append', metavar='SP1,SP2,...:Y', help='cluster species and constrained total abundance; repeatable'); s.add_argument('--coulomb', action='store_true'); s.add_argument('--min-abundance', type=float, default=0.0); s.add_argument('--min-x', type=float, default=0.0); s.set_defaults(func=cmd_qse)
 
-    s = sub.add_parser('jina-summary', help='summarize separate JINA nuclide and reaction XML files')
+    s = sub.add_parser('jina-summary', help='summarise separate JINA nuclide and reaction XML files')
     s.add_argument('nuclides_xml')
     s.add_argument('reactions_xml')
     s.add_argument('--zones-xml')
