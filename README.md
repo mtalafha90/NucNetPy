@@ -216,8 +216,12 @@ reverse fits are off by a median factor of 1.10, displacing equilibrium mass
 fractions by a median of 4.5 per cent.
 
 `consistent_reverse_network` rebuilds every reverse rate from detailed balance,
-which brings the integrated composition and the independent NSE solve into
-agreement at the level of a few parts per million:
+which brings the integrated composition and the NSE solve into agreement at the
+level of a few parts per million. Note what that number does and does not
+mean: the reverse rates are built from the same equilibrium prefactor
+`solve_nse` uses, so the two calculations now share their nuclear data and the
+agreement measures their mutual consistency, not the correctness of the shared
+formulation.
 
 ```python
 from nucnetpy import consistent_reverse_network
@@ -434,13 +438,23 @@ nuclear data, screening choice, and solver tolerances. A recommended validation
 order — with the golden-output framework that implements it — is given in
 [`docs/PURE_PYTHON_PORT_STATUS.md`](docs/PURE_PYTHON_PORT_STATUS.md).
 
-The strongest internal evidence the package offers is that two independent
-subsystems agree: integrating a silicon-burning trajectory to its stationary
-state reproduces an independently solved NSE composition to a few parts per
-million, once the reverse rates are made thermodynamically consistent. Golden
-files pin behaviour against change, but only agreement between calculations that
-share no machinery says anything about correctness. Run `pytest -q` for the
-suite, and `validation/demonstration.py` for the full comparison.
+The strongest internal evidence the package offers is the silicon-burning
+comparison: integrating a trajectory to its stationary state and comparing with
+a separately solved NSE composition. Read the two cases differently.
+
+With the library's own forward and reverse fits the two sides share no
+numerical input, so the 4.5 per cent disagreement is a real statement about the
+data. With reverse rates rebuilt from detailed balance the agreement reaches a
+few parts per million, but the reverse rates are then derived from the same
+prefactor `solve_nse` uses, so that number measures how consistently the
+integrator, the stoichiometry and the equilibrium solver treat one shared
+formulation. It is not evidence that the formulation itself is right; that
+needs a reference outside this package.
+
+Golden files pin behaviour against change. Agreement between two calculations
+is evidence about whatever they do not have in common, which is worth checking
+before quoting it. Run `pytest -q` for the suite, and
+`validation/demonstration.py` for the full comparison.
 
 ---
 

@@ -37,9 +37,22 @@ moving.
 
 **Equilibrium.** Where the physics allows it, run the calculation to its
 stationary state and compare with `solve_nse`. This is the strongest check
-available, because the two share no machinery. Read {doc}`pitfalls` on reverse
-rates first, or the comparison will measure the rate library rather than the
-code.
+available, but what it tests depends on where the reverse rates came from, and
+the two cases are worth keeping apart.
+
+With the library's own reverse fits the two sides share no numerical input, so
+a disagreement is informative — though it will usually measure the rate
+library rather than the code, which is why {doc}`pitfalls` on reverse rates is
+worth reading first.
+
+With reverse rates rebuilt by `consistent_reverse_network` the two sides are no
+longer independent: the reverse rates are derived from the same equilibrium
+prefactor `solve_nse` uses, so the masses, the `(2J+1)` factor and the
+partition-function convention are common to both and cancel from the
+comparison. That agreement is a strong end-to-end test of the integrator, the
+stoichiometry and the equilibrium solver's root finding, and says nothing about
+whether the shared formulation is right. For that you need a reference outside
+this package.
 
 ## Golden files and what they do not prove
 
