@@ -151,8 +151,16 @@ def cmd_evolve(args):
     n = _load(args.xml); z = n.zone(args.zone_index)
     times = time_grid(args.t0, args.t1, args.steps, args.log_time)
     res = evolve_zone(n, z, times, thermo=constant_thermo(args.t9 or z.temperature9(), args.rho or z.density()), method=args.method)
+    # A failed solve still carries a full abundance vector, and a positivity
+    # projection that had to invent baryon number also reports failure here.
+    # Printing the numbers without the verdict would make either look like an
+    # ordinary result, so the status goes out first and sets the exit code.
+    print(f"success {res.success} nfev {res.nfev} njev {res.njev}")
+    if not res.success:
+        print(f"error: {res.message}", file=sys.stderr)
     for s, y in sorted(res.final_abundances.items()):
         if y >= args.min_abundance: print(s, f"{y:.12e}")
+    return 0 if res.success else 1
 
 
 def cmd_energy(args):
@@ -189,6 +197,7 @@ def cmd_nse(args):
         x = n.species.get(name).a * y if name in n.species else y
         if y >= args.min_abundance or x >= args.min_x:
             print(f"{name:8s} Y={y:.12e} X={x:.12e}")
+    return 0 if res.success else 1
 
 
 def cmd_qse(args):
@@ -208,6 +217,7 @@ def cmd_qse(args):
         x = n.species.get(name).a * y if name in n.species else y
         if y >= args.min_abundance or x >= args.min_x:
             print(f"{name:8s} Y={y:.12e} X={x:.12e}")
+    return 0 if res.success else 1
 
 
 def cmd_jina_summary(args):
