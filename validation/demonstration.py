@@ -43,6 +43,7 @@ import numpy as np
 
 from nucnetpy.core import Zone
 from nucnetpy.io.jina import read_jina_xml
+from nucnetpy.detailed_balance import consistent_reverse_network
 from nucnetpy.network_limiter import limit_network, select_species
 from nucnetpy.nse import solve_nse
 from nucnetpy.solver import constant_thermo, evolve_zone, rhs, time_grid
@@ -149,6 +150,58 @@ def silicon_burning(base_net, t9: float, rho: float, t_end: float, steps: int,
         "nse_mass_fractions": {k: float(v) for k, v in x_nse.items()},
     }
     return record
+
+
+def detailed_balance_study(base_net, t9: float, rho: float, t_end: float,
+                           steps: int, rtol: float, atol: float) -> Dict[str, object]:
+    """Repeat the silicon burn with reverse rates rebuilt from detailed balance.
+
+    Two variants are recorded.  The first attaches each reverse rate as a
+    function of temperature, which is exact but not writable to XML.  The
+    second tabulates it on a logarithmic grid, which is what makes a network
+    serialisable and costs accuracy.
+
+    The agreement this produces is not an independent check: the reverse rates
+    are derived from the same equilibrium prefactor ``solve_nse`` uses, so the
+    two sides share their nuclear data.  It measures how consistently the
+    integrator, the stoichiometry and the equilibrium solver treat one shared
+    formulation.
+    """
+    out: Dict[str, object] = {"t9": t9, "rho": rho, "t_end": t_end,
+                              "steps": steps, "rtol": rtol, "atol": atol}
+    for label, tabulate in (("function", False), ("tabulated", True)):
+        net = copy.deepcopy(base_net)
+        limit_network(net, ALPHA_CHAIN)
+        net = consistent_reverse_network(net, tabulate=tabulate)
+        zone = Zone(abundances={"si28": 1.0 / 28.0})
+        net.zones = [zone]
+        ye = zone.ye(net.species)
+
+        t0 = time.perf_counter()
+        result = evolve_zone(net, zone, time_grid(0.0, t_end, steps),
+                             thermo=constant_thermo(t9, rho), method="bdf",
+                             rtol=rtol, atol=atol)
+        seconds = time.perf_counter() - t0
+        rec: Dict[str, object] = {
+            "tabulated": tabulate,
+            "seconds": seconds,
+            "evolve_success": bool(result.success),
+            "evolve_message": str(result.message),
+            "reactions": len(net.reactions.reactions),
+        }
+        if result.success and len(result.y):
+            nse = solve_nse(net, t9=t9, rho=rho, ye=ye)
+            x_net = mass_fractions(net, result.final_abundances)
+            x_nse = mass_fractions(net, nse.abundances)
+            diffs = [abs(x_net.get(k, 0.0) - v) / v
+                     for k, v in x_nse.items()
+                     if k not in {"n", "h1"} and v >= 1.0e-6]
+            if diffs:
+                rec["median_rel_diff_vs_nse"] = float(np.median(diffs))
+                rec["max_rel_diff_vs_nse"] = float(max(diffs))
+            rec["final_xsum"] = float(sum(x_net.values()))
+        out[label] = rec
+    return out
 
 
 def solver_comparison(base_net, t9: float, rho: float, t_end: float, steps: int,
@@ -266,6 +319,24 @@ def hydrogen_burning(base_net, t9: float, rho: float, t_end: float, steps: int,
             result.message.split("positivity projection created ")[1].split()[0])
     else:
         record["projection_created"] = 0.0
+    # Repeat without positivity projection.  This is what shows the mechanism:
+    # baryon number is then conserved to round-off, but a component is carried
+    # far negative, and it is projecting that away which invents the mass.
+    unclipped = evolve_zone(net, zone, times, thermo=constant_thermo(t9, rho),
+                            method="bdf", rtol=rtol, atol=atol,
+                            project_positive=False)
+    if len(unclipped.y):
+        y_end = unclipped.y[-1]
+        i = int(np.argmin(y_end))
+        record["unclipped"] = {
+            "evolve_success": bool(unclipped.success),
+            "min_abundance": float(y_end[i]),
+            "min_abundance_species": unclipped.species[i],
+            "xsum": float(sum(net.species[s].a * v
+                              for s, v in zip(unclipped.species, y_end)
+                              if s in net.species)),
+        }
+
     record["_trajectory"] = {
         "time": result.time.tolist(),
         "species": result.species,
@@ -499,6 +570,11 @@ def main() -> int:
     print(json.dumps({k: v for k, v in silicon.items() if not k.startswith("_")},
                      indent=2), flush=True)
 
+    print("--- detailed balance ---", flush=True)
+    detailed = detailed_balance_study(base, args.t9, args.rho, args.t_end,
+                                      args.steps, args.rtol, args.atol)
+    print(json.dumps(detailed, indent=2), flush=True)
+
     print("--- solver comparison ---", flush=True)
     solvers = solver_comparison(base, args.t9, args.rho, args.t_end, args.steps,
                                 ["bdf", "radau", "lsoda"], args.rtol, args.atol)
@@ -545,6 +621,7 @@ def main() -> int:
             "load_seconds": load_seconds,
         },
         "silicon_burning": {k: v for k, v in silicon.items() if not k.startswith("_")},
+        "detailed_balance": detailed,
         "solver_comparison": solvers,
         "tolerance_study": tolerances,
         "figures": figures,

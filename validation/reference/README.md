@@ -17,7 +17,7 @@ recorded beside them. Nothing but the installed package is needed.
 | File | Contents |
 |---|---|
 | `si_burning_network.xml` | The extracted network: 15 nuclides, 32 reactions, and the initial zone. Complete input — rates, mass excesses, spins and partition functions included |
-| `si_burning_expected.json` | Conditions, expected final abundances, the NSE solution, and the comparison tolerances |
+| `si_burning_expected.json` | Conditions, expected final abundances, the NSE solution, the detailed-balance variants, and the comparison tolerances |
 | `si_burning_provenance.json` | Checksums, sizes and data-release labels of the database this was extracted from |
 
 The network is 58 kB, so it costs nothing to archive, and it is the whole
@@ -31,6 +31,12 @@ Pure <sup>28</sup>Si, `Y = 1/28`, giving `Ye = 0.5` exactly, burned at a
 constant `T9 = 5` and `rho = 1e8 g/cm^3` for 10 s on 120 output points, with
 BDF at `rtol = 1e-8` and `atol = 1e-14`. The stationary composition is then
 compared with `solve_nse` at the same conditions.
+
+The archive also carries the detailed-balance variant, which is the article's
+headline result: the same burn with every reverse rate rebuilt by
+`consistent_reverse_network`, both as a function of temperature and tabulated.
+That agreement measures the mutual consistency of two calculations that then
+share their nuclear data; it does not validate the shared formulation.
 
 ## Provenance of the source database
 

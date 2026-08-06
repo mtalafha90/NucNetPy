@@ -141,6 +141,30 @@ def main() -> int:
     final = result.final_abundances
     xsum = sum(check.species[k].a * v for k, v in final.items() if k in check.species)
 
+    # The detailed-balance variant is the article's headline result, so the
+    # archive carries it too.  Reverse rates are rebuilt from the equilibrium
+    # constant, which shares its prefactor with solve_nse; the agreement below
+    # therefore measures mutual consistency, not the correctness of that
+    # shared formulation.
+    from nucnetpy.detailed_balance import consistent_reverse_network
+    db = {}
+    for label, tabulate in (("function", False), ("tabulated", True)):
+        dnet = consistent_reverse_network(read_xml(str(network_path)),
+                                          tabulate=tabulate)
+        dzone = dnet.zone(0)
+        dres = evolve_zone(dnet, dzone, times, thermo=constant_thermo(T9, RHO),
+                           method="bdf", rtol=RTOL, atol=ATOL)
+        dnse = solve_nse(dnet, t9=T9, rho=RHO, ye=ye)
+        xn = {k: dnet.species[k].a * v for k, v in dres.final_abundances.items()
+              if k in dnet.species}
+        xq = {k: dnet.species[k].a * v for k, v in dnse.abundances.items()
+              if k in dnet.species}
+        diffs = [abs(xn.get(k, 0.0) - v) / v for k, v in xq.items()
+                 if k not in {"n", "h1"} and v >= 1.0e-6]
+        db[label] = {"evolve_success": bool(dres.success),
+                     "median_rel_diff_vs_nse": float(np.median(diffs)),
+                     "max_rel_diff_vs_nse": float(max(diffs))}
+
     expected = {
         "case": "silicon burning",
         "description": "Pure Si-28 burned to its stationary composition and "
@@ -163,6 +187,7 @@ def main() -> int:
             "nse_mu_n": float(nse.mu_n),
             "nse_xsum": float(nse.xsum),
             "nse_ye": float(nse.computed_ye),
+            "detailed_balance": db,
         },
         "tolerances": {
             "comment": "Abundances are compared with numpy.isclose using these "
@@ -172,6 +197,7 @@ def main() -> int:
             "rtol": 1.0e-6,
             "atol": 1.0e-18,
             "xsum_atol": 1.0e-9,
+            "detailed_balance_rtol": 1.0e-3,
         },
         "environment": environment_record(),
     }

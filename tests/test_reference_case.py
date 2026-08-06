@@ -99,3 +99,33 @@ def test_provenance_records_the_source_database():
     # The distinction that makes the species counts intelligible.
     assert (parsed["nuclide_file_entries"] + parsed["placeholders_without_nuclear_data"]
             == parsed["species_in_memory"])
+
+
+def test_detailed_balance_result_reproduces(network, spec):
+    """The article's headline figure must keep coming out of the archive."""
+    from nucnetpy.detailed_balance import consistent_reverse_network
+    exp = spec["expected"].get("detailed_balance")
+    if not exp:
+        pytest.skip("archive predates the detailed-balance expectations")
+    c, tol = spec["conditions"], spec["tolerances"]
+    rtol = tol.get("detailed_balance_rtol", 1.0e-3)
+    for label, want in exp.items():
+        net = consistent_reverse_network(
+            read_xml(str(REFERENCE / spec["network"]["file"])),
+            tabulate=(label == "tabulated"))
+        res = evolve_zone(net, net.zone(0),
+                          time_grid(0.0, c["t_end"], c["steps"]),
+                          thermo=constant_thermo(c["t9"], c["rho"]),
+                          method=c["method"], rtol=c["rtol"], atol=c["atol"])
+        assert res.success, res.message
+        nse = solve_nse(net, t9=c["t9"], rho=c["rho"], ye=c["initial_ye"])
+        xn = {k: net.species[k].a * v for k, v in res.final_abundances.items()
+              if k in net.species}
+        xq = {k: net.species[k].a * v for k, v in nse.abundances.items()
+              if k in net.species}
+        d = [abs(xn.get(k, 0.0) - v) / v for k, v in xq.items()
+             if k not in {"n", "h1"} and v >= 1.0e-6]
+        assert np.isclose(float(np.median(d)), want["median_rel_diff_vs_nse"],
+                          rtol=rtol), label
+        assert np.isclose(float(max(d)), want["max_rel_diff_vs_nse"],
+                          rtol=rtol), label

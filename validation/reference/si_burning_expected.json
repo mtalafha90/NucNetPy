@@ -61,13 +61,26 @@
     "nse_mu_p": -3.448779128927869,
     "nse_mu_n": -1.633832494726303,
     "nse_xsum": 1.0000000000000062,
-    "nse_ye": 0.5000000000000031
+    "nse_ye": 0.5000000000000031,
+    "detailed_balance": {
+      "function": {
+        "evolve_success": true,
+        "median_rel_diff_vs_nse": 4.456923112878361e-06,
+        "max_rel_diff_vs_nse": 6.430967561628902e-06
+      },
+      "tabulated": {
+        "evolve_success": true,
+        "median_rel_diff_vs_nse": 0.00046889073736580065,
+        "max_rel_diff_vs_nse": 0.0010486158167576447
+      }
+    }
   },
   "tolerances": {
     "comment": "Abundances are compared with numpy.isclose using these values. They are loose enough to absorb BLAS and library differences between platforms and tight enough that a change in the physics fails the check.",
     "rtol": 1e-06,
     "atol": 1e-18,
-    "xsum_atol": 1e-09
+    "xsum_atol": 1e-09,
+    "detailed_balance_rtol": 0.001
   },
   "environment": {
     "nucnetpy": "1.0.0",

@@ -40,7 +40,7 @@
     "species_in_memory": 8131,
     "placeholders_without_nuclear_data": 279,
     "reactions": 81758,
-    "load_seconds": 27.318453557999987
+    "load_seconds": 23.566743151000082
   },
   "extraction": {
     "species_kept": [

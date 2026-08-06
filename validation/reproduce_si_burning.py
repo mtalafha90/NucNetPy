@@ -119,6 +119,35 @@ def main() -> int:
         compare(f"NSE Y({name})", float(nse.abundances.get(name, 0.0)), want,
                 tol["rtol"], tol["atol"], failures)
 
+    # The detailed-balance variant, which is the article's headline number.
+    if "detailed_balance" in exp:
+        from nucnetpy.detailed_balance import consistent_reverse_network
+        dbtol = tol.get("detailed_balance_rtol", 1.0e-3)
+        for label, want in exp["detailed_balance"].items():
+            dnet = consistent_reverse_network(read_xml(str(network_path)),
+                                              tabulate=(label == "tabulated"))
+            dres = evolve_zone(dnet, dnet.zone(0),
+                               time_grid(0.0, c["t_end"], c["steps"]),
+                               thermo=constant_thermo(c["t9"], c["rho"]),
+                               method=c["method"], rtol=c["rtol"], atol=c["atol"])
+            if not dres.success:
+                failures.append(f"detailed balance ({label}): {dres.message}")
+                continue
+            dnse = solve_nse(dnet, t9=c["t9"], rho=c["rho"], ye=ye)
+            xn = {k: dnet.species[k].a * v
+                  for k, v in dres.final_abundances.items() if k in dnet.species}
+            xq = {k: dnet.species[k].a * v
+                  for k, v in dnse.abundances.items() if k in dnet.species}
+            diffs = [abs(xn.get(k, 0.0) - v) / v for k, v in xq.items()
+                     if k not in {"n", "h1"} and v >= 1.0e-6]
+            for stat in ("median_rel_diff_vs_nse", "max_rel_diff_vs_nse"):
+                got = float(np.median(diffs)) if stat.startswith("median") else float(max(diffs))
+                compare(f"detailed balance {label} {stat}", got, want[stat],
+                        dbtol, 0.0, failures)
+            if not args.quiet:
+                print(f"detailed balance ({label}): median "
+                      f"{np.median(diffs):.3e}, max {max(diffs):.3e}")
+
     if failures:
         print(f"\nFAILED: {len(failures)} comparison(s) did not reproduce",
               file=sys.stderr)
