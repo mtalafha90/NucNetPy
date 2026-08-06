@@ -13,8 +13,12 @@ handles one-zone and multi-zone abundance data, evaluates reaction rates and
 flows, solves nuclear statistical equilibrium (NSE), and integrates single-zone
 network evolution with SciPy stiff solvers.
 
-NucNetPy does **not** call or wrap the original C++ code — it is a clean
-reimplementation in Python on top of NumPy and SciPy.
+NucNetPy does **not** call, wrap or incorporate source code from the original
+C++ implementation, which is not required at run time. It is an independent
+reimplementation in Python on top of NumPy and SciPy, whose design and
+supported workflows were informed by the NucNet Tools documentation, examples
+and publications; [`docs/BLOG_COVERAGE.md`](docs/BLOG_COVERAGE.md) records
+which routines were written by working from named C++ source files.
 
 ---
 
