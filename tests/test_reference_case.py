@@ -70,7 +70,9 @@ def test_reference_case_reproduces(network, spec):
 
 def test_reference_nse_reproduces(network, spec):
     c, exp, tol = spec["conditions"], spec["expected"], spec["tolerances"]
-    nse = solve_nse(network, t9=c["t9"], rho=c["rho"], ye=c["initial_ye"])
+    sp = [n for n in network.species if n not in {"n", "h1"}]
+    nse = solve_nse(network, t9=c["t9"], rho=c["rho"], ye=c["initial_ye"],
+                    species=sp)
     assert nse.success
     assert np.isclose(nse.mu_p, exp["nse_mu_p"], rtol=tol["rtol"], atol=tol["atol"])
     assert np.isclose(nse.mu_n, exp["nse_mu_n"], rtol=tol["rtol"], atol=tol["atol"])
@@ -118,7 +120,9 @@ def test_detailed_balance_result_reproduces(network, spec):
                           thermo=constant_thermo(c["t9"], c["rho"]),
                           method=c["method"], rtol=c["rtol"], atol=c["atol"])
         assert res.success, res.message
-        nse = solve_nse(net, t9=c["t9"], rho=c["rho"], ye=c["initial_ye"])
+        sp = [n for n in net.species if n not in {"n", "h1"}]
+        nse = solve_nse(net, t9=c["t9"], rho=c["rho"], ye=c["initial_ye"],
+                        species=sp)
         xn = {k: net.species[k].a * v for k, v in res.final_abundances.items()
               if k in net.species}
         xq = {k: net.species[k].a * v for k, v in nse.abundances.items()

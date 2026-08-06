@@ -68,6 +68,21 @@ def mass_fractions(net, abundances: Dict[str, float]) -> Dict[str, float]:
     return {k: net.species[k].a * v for k, v in abundances.items() if k in net.species}
 
 
+#: Free nucleons are excluded from the equilibrium solve.  An alpha chain has
+#: no reaction that liberates a nucleon, so the network cannot populate n or
+#: h1 at all, while an unrestricted NSE puts about 6.3e-6 of the mass there.
+#: Comparing against that would charge the network for species it has no way
+#: to reach, and that difference alone dominates the residual once the reverse
+#: rates are made consistent.  The equilibrium is therefore solved over the
+#: same species set the network can actually populate.
+NSE_EXCLUDED = {"n", "h1"}
+
+
+def nse_species(net) -> List[str]:
+    """The species the network can populate, for a like-for-like equilibrium."""
+    return [n for n in net.species if n not in NSE_EXCLUDED]
+
+
 def silicon_burning(base_net, t9: float, rho: float, t_end: float, steps: int,
                     rtol: float, atol: float) -> Dict[str, object]:
     """Burn pure silicon-28 towards the iron group and compare with NSE."""
@@ -84,7 +99,7 @@ def silicon_burning(base_net, t9: float, rho: float, t_end: float, steps: int,
     evolve_seconds = time.perf_counter() - t0
 
     t0 = time.perf_counter()
-    nse = solve_nse(net, t9=t9, rho=rho, ye=ye)
+    nse = solve_nse(net, t9=t9, rho=rho, ye=ye, species=nse_species(net))
     nse_seconds = time.perf_counter() - t0
 
     record: Dict[str, object] = {
@@ -190,7 +205,8 @@ def detailed_balance_study(base_net, t9: float, rho: float, t_end: float,
             "reactions": len(net.reactions.reactions),
         }
         if result.success and len(result.y):
-            nse = solve_nse(net, t9=t9, rho=rho, ye=ye)
+            nse = solve_nse(net, t9=t9, rho=rho, ye=ye,
+                            species=nse_species(net))
             x_net = mass_fractions(net, result.final_abundances)
             x_nse = mass_fractions(net, nse.abundances)
             diffs = [abs(x_net.get(k, 0.0) - v) / v

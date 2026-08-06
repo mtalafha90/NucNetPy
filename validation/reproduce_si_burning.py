@@ -36,6 +36,11 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def nse_species(net):
+    """Match the extraction: free nucleons are outside the network's reach."""
+    return [n for n in net.species if n not in {"n", "h1"}]
+
+
 def compare(label, got, want, rtol, atol, failures):
     ok = bool(np.isclose(got, want, rtol=rtol, atol=atol))
     if not ok:
@@ -86,7 +91,8 @@ def main() -> int:
     if not result.success:
         failures.append(f"evolution failed: {result.message}")
 
-    nse = solve_nse(net, t9=c["t9"], rho=c["rho"], ye=ye)
+    nse = solve_nse(net, t9=c["t9"], rho=c["rho"], ye=ye,
+                    species=nse_species(net))
     if not nse.success:
         failures.append("NSE solve failed")
 
@@ -133,7 +139,8 @@ def main() -> int:
             if not dres.success:
                 failures.append(f"detailed balance ({label}): {dres.message}")
                 continue
-            dnse = solve_nse(dnet, t9=c["t9"], rho=c["rho"], ye=ye)
+            dnse = solve_nse(dnet, t9=c["t9"], rho=c["rho"], ye=ye,
+                             species=nse_species(dnet))
             xn = {k: dnet.species[k].a * v
                   for k, v in dres.final_abundances.items() if k in dnet.species}
             xq = {k: dnet.species[k].a * v

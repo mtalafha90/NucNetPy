@@ -57,6 +57,16 @@ ATOL = 1.0e-14
 
 REFERENCE_DIR = Path(__file__).resolve().parent / "reference"
 
+#: Free nucleons are excluded from the equilibrium solve: an alpha chain has no
+#: reaction that liberates one, so the network cannot populate n or h1, while an
+#: unrestricted NSE puts about 6.3e-6 of the mass there.  Comparing against that
+#: charges the network for species it cannot reach.
+NSE_EXCLUDED = {"n", "h1"}
+
+
+def nse_species(net):
+    return [n for n in net.species if n not in NSE_EXCLUDED]
+
 
 def sha256(path: Path) -> str:
     h = hashlib.sha256()
@@ -136,7 +146,7 @@ def main() -> int:
     if not result.success:
         print(f"evolution failed: {result.message}", file=sys.stderr)
         return 1
-    nse = solve_nse(check, t9=T9, rho=RHO, ye=ye)
+    nse = solve_nse(check, t9=T9, rho=RHO, ye=ye, species=nse_species(check))
 
     final = result.final_abundances
     xsum = sum(check.species[k].a * v for k, v in final.items() if k in check.species)
@@ -154,7 +164,8 @@ def main() -> int:
         dzone = dnet.zone(0)
         dres = evolve_zone(dnet, dzone, times, thermo=constant_thermo(T9, RHO),
                            method="bdf", rtol=RTOL, atol=ATOL)
-        dnse = solve_nse(dnet, t9=T9, rho=RHO, ye=ye)
+        dnse = solve_nse(dnet, t9=T9, rho=RHO, ye=ye,
+                         species=nse_species(dnet))
         xn = {k: dnet.species[k].a * v for k, v in dres.final_abundances.items()
               if k in dnet.species}
         xq = {k: dnet.species[k].a * v for k, v in dnse.abundances.items()
