@@ -10,10 +10,12 @@ is what the 4.5 per cent result measures.
 
 That independence does not survive rebuilding the reverse rates with
 consistent_reverse_network, which derives them from the same equilibrium
-prefactor solve_nse uses.  The parts-per-million agreement that follows
-measures how consistently the integrator, the stoichiometry and the
-equilibrium solver treat one shared formulation; it does not test the
-formulation itself.
+prefactor solve_nse uses.  The agreement that follows measures how
+consistently the integrator, the stoichiometry and the equilibrium solver
+treat one shared formulation; it does not test the formulation itself.  The
+equilibrium is solved over the species the network can populate, since an
+alpha chain cannot liberate a nucleon and an unrestricted NSE would place
+6.3e-6 of the mass in free nucleons that the network can never reach.
 
 It writes a JSON record, LaTeX tables, and figures, so that every demonstration
 number and plot in the manuscript can be regenerated with one command.

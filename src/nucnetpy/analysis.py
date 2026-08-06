@@ -283,11 +283,12 @@ def nuclear_energy_generation_rate(network: Network, zone_index: int = 0,
     with ``Delta M_i`` the mass excess in MeV and
     ``C = 1.602176634e-6 erg/MeV`` (``constants.MEV_TO_ERG``) converting the
     sum, which carries units of MeV/g/s, into erg/g/s.  This is exact, and it is
-    preferable to summing ``Q_r`` times the flow of each reaction for two
-    reasons.  It needs no Q-values, so it cannot disagree with them where a rate
-    library and a nuclide file are inconsistent, and it uses the same mass
-    excesses as the equilibrium solver, so energy release and equilibrium are
-    guaranteed to be built from one set of nuclear data.
+    preferable to summing ``Q_r`` times the flow of each reaction: it does not
+    use the reaction Q-values stored in the rate library, so it is internally
+    consistent with the adopted mass-excess table -- the same table the
+    equilibrium solver uses -- and energy release and equilibrium are therefore
+    built from one set of nuclear data.  It may differ from library Q-values
+    when the two data sources use different nuclear masses.
 
     A positive value denotes energy released to the plasma.  Neutrino losses
     are not subtracted: energy carried away by neutrinos from weak reactions

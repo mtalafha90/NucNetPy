@@ -111,15 +111,16 @@ consistent = nn.consistent_reverse_network(net)
 This pairs each reaction with its inverse, keeps the exothermic member, and
 regenerates the other from detailed balance. On the JINA alpha chain it improves
 agreement between the integrated composition and a separately solved NSE from a
-median of 4.5 per cent to 4.5 parts per million.
+median of 4.5 per cent to 7 parts in 10^8, once the equilibrium is solved
+over the same species set the network can populate.
 
 Read that second figure carefully. The regenerated reverse rates come from the
 same equilibrium prefactor `solve_nse` uses, so the two calculations now share
 their nuclear data: an error in the masses, the `(2J+1)` factor or the
-partition-function convention would move both together and cancel. The
-parts-per-million agreement measures how consistently the integrator, the
-stoichiometry and the equilibrium solver treat one shared formulation, not
-whether that formulation is right.
+partition-function convention would move both together and cancel. That
+agreement measures how consistently the integrator, the stoichiometry and the
+equilibrium solver treat one shared formulation, not whether that formulation
+is right.
 
 It is an option rather than a default, because it replaces measured reverse
 rates with values derived from mass differences. Pass `tabulate=True` if the
@@ -147,9 +148,11 @@ from nucnetpy import nuclear_energy_generation_rate, nuclear_energy_release
 
 The rate follows from the change in total mass excess,
 `eps = -N_A * C * sum_i (dY_i/dt) * dM_i`, where `C = 1.602176634e-6 erg/MeV`
-converts the mass excesses from MeV, so it needs no `Q`-values and cannot
-disagree with them where a rate library and a nuclide file are inconsistent.
-Neutrino losses are not subtracted.
+converts the mass excesses from MeV. It does not use the reaction `Q`-values
+stored in the rate library, so it is internally consistent with the adopted
+mass-excess table, the same one `solve_nse` uses. It may differ from library
+`Q`-values when the two data sources use different nuclear masses. Neutrino
+losses are not subtracted.
 
 ## Analysis
 

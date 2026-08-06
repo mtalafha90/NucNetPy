@@ -55,7 +55,8 @@ which routines were written by working from named C++ source files.
   data: for the alpha chain at T9=5 the fitted reverse rates differ from the
   detailed-balance value implied by that mass table by a median factor 1.10,
   displacing equilibrium mass fractions by a median 4.5%. Rebuilt from detailed
-  balance, the network reproduces `solve_nse` to **4.5e-6**.
+  balance, and with the equilibrium solved over the same species set, the
+  network reproduces `solve_nse` to **7e-8**.
 - **Screening** — `SkyNetScreening` assigns each charge a Coulomb chemical
   potential mu(Z)/kT, blending weak, intermediate and strong regimes. Because it
   is a chemical potential it applies consistently to forward and reverse rates,
@@ -229,7 +230,7 @@ place. What the measurement shows is that both cannot be imposed at once.
 
 `consistent_reverse_network` rebuilds every reverse rate from detailed balance,
 which brings the integrated composition and the NSE solve into agreement at the
-level of a few parts per million. Note what that number does and does not
+level of a few parts in 10^8. Note what that number does and does not
 mean: the reverse rates are built from the same equilibrium prefactor
 `solve_nse` uses, so the two calculations now share their nuclear data and the
 agreement measures their mutual consistency, not the correctness of the shared
@@ -301,8 +302,10 @@ evolve_zone(net, zone, times, thermo=..., screening=SkyNetScreening(net.species)
 
 The nuclear energy generation rate follows from the change in total mass excess,
 `eps = -N_A * C * sum_i (dY_i/dt) * dM_i` with `C = 1.602176634e-6 erg/MeV`
-converting the MeV mass excesses, so it needs no Q-values and cannot
-disagree with them where a rate library and a nuclide file are inconsistent:
+converting the MeV mass excesses. It does not use the reaction Q-values stored
+in the rate library, so it is internally consistent with the adopted
+mass-excess table -- the same one `solve_nse` uses. It may differ from library
+Q-values when the two data sources use different nuclear masses:
 
 ```python
 from nucnetpy import nuclear_energy_generation_rate, nuclear_energy_release
@@ -458,7 +461,7 @@ a separately solved NSE composition. Read the two cases differently.
 With the library's own forward and reverse fits the two sides share no
 numerical input, so the 4.5 per cent disagreement is a real statement about the
 data. With reverse rates rebuilt from detailed balance the agreement reaches a
-few parts per million, but the reverse rates are then derived from the same
+few parts in 10^8, but the reverse rates are then derived from the same
 prefactor `solve_nse` uses, so that number measures how consistently the
 integrator, the stoichiometry and the equilibrium solver treat one shared
 formulation. It is not evidence that the formulation itself is right; that
