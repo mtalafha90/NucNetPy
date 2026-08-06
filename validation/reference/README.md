@@ -12,6 +12,13 @@ python validation/reproduce_si_burning.py
 Exit status 0 means every archived value was reproduced within the tolerances
 recorded beside them. Nothing but the installed package is needed.
 
+It also reports its own memory use. Because it starts from the archived
+15-species network in a clean process, that figure is the cost of this case
+alone -- about 4 MiB above an interpreter already holding NumPy and SciPy, for
+a process peak near 80 MiB. The per-case memory recorded by
+`validation/benchmark_performance.py` is not comparable: that is `ru_maxrss`
+for the whole process, taken after the full database has been loaded.
+
 ## What is here
 
 | File | Contents |

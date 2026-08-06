@@ -54,7 +54,16 @@ DEFAULT_LADDER = [
 
 
 def peak_memory_mb() -> float:
-    """Return peak resident set size in MiB (Linux reports KiB)."""
+    """Return peak resident set size in MiB (Linux reports KiB).
+
+    This is ``ru_maxrss``, the high-water mark for the whole process.  It never
+    decreases, and the complete database is loaded before any network is cut,
+    so the value recorded against a small case is dominated by that load and
+    says nothing about the case itself.  It is kept as a ceiling on the run,
+    not as a per-case measurement.  For an isolated figure, run
+    ``validation/reproduce_si_burning.py``, which starts from the archived
+    15-species network in a clean process and reports its own increment.
+    """
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
 
 
@@ -168,7 +177,8 @@ def benchmark_case(base_net, label: str, zmax: Optional[int], amax: Optional[int
         record["evolve_success"] = None
         record["evolve_message"] = f"skipped: {n_species} species exceeds --evolve-limit"
 
-    record["peak_memory_mb"] = peak_memory_mb()
+    # Process high-water mark, not the cost of this case; see peak_memory_mb.
+    record["process_peak_memory_mb"] = peak_memory_mb()
     return record
 
 
@@ -255,6 +265,11 @@ def main() -> int:
             "missing_species": len(validation["missing_species"]),
             "invalid_reactions": len(validation["invalid_reactions"]),
             "load_seconds": load_seconds,
+        },
+        "notes": {
+            "process_peak_memory_mb": "ru_maxrss for the whole process, which "
+            "never decreases and already includes the full database load; it "
+            "is not the memory cost of the individual case",
         },
         "conditions": {"t9": args.t9, "rho": args.rho, "t_end": args.t_end,
                        "steps": args.steps, "rtol": args.rtol, "atol": args.atol},

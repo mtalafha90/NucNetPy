@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import resource
 import sys
 from pathlib import Path
 
@@ -36,6 +37,11 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def rss_mb() -> float:
+    """Peak resident set size of this process, in MiB (Linux reports KiB)."""
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+
+
 def nse_species(net):
     """Match the extraction: free nucleons are outside the network's reach."""
     return [n for n in net.species if n not in {"n", "h1"}]
@@ -54,6 +60,14 @@ def main() -> int:
     ap.add_argument("--reference-dir", default=str(REFERENCE_DIR))
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
+
+    # SciPy's sparse and integrate modules are imported lazily at the point of
+    # use, so they must be pulled in before the baseline is taken; otherwise
+    # their cost is charged to the case rather than to the numerical stack.
+    import scipy.integrate  # noqa: F401
+    import scipy.sparse  # noqa: F401
+    import scipy.optimize  # noqa: F401
+    baseline_mb = rss_mb()
 
     ref = Path(args.reference_dir)
     spec = json.loads((ref / "si_burning_expected.json").read_text())
@@ -163,7 +177,11 @@ def main() -> int:
         return 1
 
     if not args.quiet:
-        print(f"\nOK: every archived value reproduced within "
+        peak = rss_mb()
+        print(f"\nmemory: {peak:.0f} MiB process peak, of which "
+              f"{peak - baseline_mb:.0f} MiB is this case above the "
+              f"interpreter and NumPy/SciPy baseline")
+        print(f"OK: every archived value reproduced within "
               f"rtol={tol['rtol']:g}, atol={tol['atol']:g}")
     return 0
 
