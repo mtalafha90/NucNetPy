@@ -48,9 +48,10 @@ reimplementation in Python on top of NumPy and SciPy.
   reverse rate from detailed balance instead of the library's independently
   fitted value. Rate libraries fit the two directions separately, so a network
   built from them relaxes to a state that is *not* the NSE of the same nuclear
-  data: for the alpha chain at T9=5 the fitted reverse rates are off by a median
-  factor 1.10, displacing equilibrium mass fractions by a median 4.5%. Rebuilt
-  from detailed balance, the network reproduces `solve_nse` to **4.5e-6**.
+  data: for the alpha chain at T9=5 the fitted reverse rates differ from the
+  detailed-balance value implied by that mass table by a median factor 1.10,
+  displacing equilibrium mass fractions by a median 4.5%. Rebuilt from detailed
+  balance, the network reproduces `solve_nse` to **4.5e-6**.
 - **Screening** — `SkyNetScreening` assigns each charge a Coulomb chemical
   potential mu(Z)/kT, blending weak, intermediate and strong regimes. Because it
   is a chemical potential it applies consistently to forward and reverse rates,
@@ -212,8 +213,15 @@ Rate libraries fit the forward and reverse directions of a reaction separately,
 so their ratio is not exactly the equilibrium constant implied by the masses
 shipped alongside them. A network built from them settles somewhere that is not
 the NSE of the same nuclear data. On the JINA alpha chain at `T9 = 5` the
-reverse fits are off by a median factor of 1.10, displacing equilibrium mass
+reverse fits differ from the detailed-balance value implied by the mass table
+they are used with by a median factor of 1.10, displacing equilibrium mass
 fractions by a median of 4.5 per cent.
+
+That is a statement about a pairing, not a verdict on the library. A fitted
+reverse rate may deliberately encode an evaluation that is not identical to the
+value derived from an accompanying mass table, and a rate compilation and a
+nuclide file need not have been built on the same mass evaluation in the first
+place. What the measurement shows is that both cannot be imposed at once.
 
 `consistent_reverse_network` rebuilds every reverse rate from detailed balance,
 which brings the integrated composition and the NSE solve into agreement at the
