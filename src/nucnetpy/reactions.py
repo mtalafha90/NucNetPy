@@ -27,8 +27,15 @@ class ReactionParticipant:
 class RateFit:
     """A standard seven-parameter ReacLib rate fit.
 
-    Rate = exp(a0 + a1/T9 + a2/T9^(1/3) + a3*T9^(1/3) + a4*T9
-               + a5*T9^(5/3) + a6*ln(T9))
+    lambda = exp(a0 + a1/T9 + a2/T9^(1/3) + a3*T9^(1/3) + a4*T9
+                 + a5*T9^(5/3) + a6*ln(T9))
+
+    A reaction may carry several such fits, and ``Reaction.bare_rate`` sums
+    them.  The result is a generic rate coefficient, not N_A<sigma v>: the same
+    form serves one-body decays and photodisintegrations, two-body captures and
+    three-body reactions, so its units depend on the number of nuclear
+    reactants.  The density factor in ``Reaction.flux`` converts it to an
+    abundance flow.
     """
     coefficients: Sequence[float]
     label: str = ""
