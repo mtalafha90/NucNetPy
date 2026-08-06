@@ -138,10 +138,15 @@ def benchmark_case(base_net, label: str, zmax: Optional[int], amax: Optional[int
     # is skipped once that becomes the dominant cost of the whole benchmark.
     ja = analytic_jacobian(net, species, thermo, sparse=True)
     ja(0.0, y0)
-    record["jacobian_analytic_seconds"] = _time_repeated(lambda: ja(0.0, y0), min_repeats=2, budget=2.0)
+    record["jacobian_analytic_seconds"] = _time_repeated(lambda: ja(0.0, y0), min_repeats=5, budget=2.0)
     if n_species <= evolve_limit:
         jf = jacobian(net, species, thermo, sparse=True)
-        record["jacobian_fd_seconds"] = _time_repeated(lambda: jf(0.0, y0), min_repeats=1, budget=0.0)
+        jf(0.0, y0)  # warm up before timing, as for the analytic matrix
+        # Both Jacobians are timed the same way.  A single sample of either is
+        # not reproducible: the analytic matrix is fast enough that scheduling
+        # noise moves it by over 50 per cent between runs, which propagates
+        # straight into the reported speedup.
+        record["jacobian_fd_seconds"] = _time_repeated(lambda: jf(0.0, y0), min_repeats=3, budget=2.0)
         # Accuracy of the analytic matrix against finite differences.
         A = np.asarray(ja(0.0, y0).todense() if hasattr(ja(0.0, y0), "todense") else ja(0.0, y0))
         F = np.asarray(jf(0.0, y0).todense() if hasattr(jf(0.0, y0), "todense") else jf(0.0, y0))
