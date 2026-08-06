@@ -7,12 +7,29 @@ import nucnetpy as nn
 
 net = nn.read_jina_xml("nuclides.xml", "reaction_data.xml", zones_xml="zone.xml")
 report = net.validate()
-print(len(net.species), "nuclides,", len(net.reactions.reactions), "reactions")
+print(len(net.species), "species in memory,",
+      len(net.reactions.reactions), "reactions")
 print("without nuclear data:", len(report["species_without_nuclear_data"]))
 ```
 
-Reading a full database of 8131 nuclides and 81758 reactions takes about 20 s
-and holds roughly 880 MB. That is the practical ceiling for a pure-Python
+Count carefully here. `len(net.species)` is the size of the in-memory network
+after parsing, not the number of entries in the nuclide file. Anything named by
+a reaction record with no entry in that file gets a synthesised placeholder, so
+it is present in memory whether or not the file described it.
+
+On the JINA database used throughout this manual the nuclide file holds 7852
+nuclides, while `len(net.species)` is 8131: those 7852 plus 279 placeholders.
+`validate()` reports no missing species precisely because the placeholders
+already exist, so `species_without_nuclear_data` is the field to read, not
+`missing_species`.
+
+The two containers also differ. `net.species` holds nuclides only, while
+`net.species_names()` returns 8136 — the same 8131 plus the massless reaction
+participants `gamma`, `electron`, `positron` and the two neutrinos, which
+balance a reaction record but never enter the abundance vector.
+
+Reading the database takes 20 to 30 s and holds it in about 0.9 GB, for a
+process peak near 1 GB. That is the practical ceiling for a pure-Python
 implementation, which is why the next step matters.
 
 ## Cutting a network down to size
