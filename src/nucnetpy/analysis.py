@@ -278,9 +278,11 @@ def nuclear_energy_generation_rate(network: Network, zone_index: int = 0,
 
     The rate follows from the change in total mass excess of the composition,
 
-        eps = -N_A sum_i (dY_i/dt) * Delta M_i,
+        eps = -N_A * C * sum_i (dY_i/dt) * Delta M_i,
 
-    with ``Delta M_i`` the mass excess in MeV.  This is exact, and it is
+    with ``Delta M_i`` the mass excess in MeV and
+    ``C = 1.602176634e-6 erg/MeV`` (``constants.MEV_TO_ERG``) converting the
+    sum, which carries units of MeV/g/s, into erg/g/s.  This is exact, and it is
     preferable to summing ``Q_r`` times the flow of each reaction for two
     reasons.  It needs no Q-values, so it cannot disagree with them where a rate
     library and a nuclide file are inconsistent, and it uses the same mass

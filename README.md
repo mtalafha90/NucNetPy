@@ -288,7 +288,8 @@ evolve_zone(net, zone, times, thermo=..., screening=SkyNetScreening(net.species)
 ```
 
 The nuclear energy generation rate follows from the change in total mass excess,
-`eps = -N_A * sum_i (dY_i/dt) * dM_i`, so it needs no Q-values and cannot
+`eps = -N_A * C * sum_i (dY_i/dt) * dM_i` with `C = 1.602176634e-6 erg/MeV`
+converting the MeV mass excesses, so it needs no Q-values and cannot
 disagree with them where a rate library and a nuclide file are inconsistent:
 
 ```python

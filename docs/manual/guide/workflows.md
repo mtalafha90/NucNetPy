@@ -88,7 +88,9 @@ print(nse.success, nse.xsum, nse.computed_ye)
 ```
 
 The solve shares no machinery with the time integration, which is what makes it
-a genuine check on a network calculation. Species carrying no nuclear data are
+a genuine check on a network calculation --- provided the network is running on
+the rate library's own reverse rates. See the caveat under *Thermodynamic
+consistency* below. Species carrying no nuclear data are
 excluded automatically; pass `require_nuclear_data=False` to override that, and
 read {doc}`pitfalls` before doing so.
 
@@ -108,8 +110,16 @@ consistent = nn.consistent_reverse_network(net)
 
 This pairs each reaction with its inverse, keeps the exothermic member, and
 regenerates the other from detailed balance. On the JINA alpha chain it improves
-agreement between the integrated composition and an independent NSE solve from a
+agreement between the integrated composition and a separately solved NSE from a
 median of 4.5 per cent to 4.5 parts per million.
+
+Read that second figure carefully. The regenerated reverse rates come from the
+same equilibrium prefactor `solve_nse` uses, so the two calculations now share
+their nuclear data: an error in the masses, the `(2J+1)` factor or the
+partition-function convention would move both together and cancel. The
+parts-per-million agreement measures how consistently the integrator, the
+stoichiometry and the equilibrium solver treat one shared formulation, not
+whether that formulation is right.
 
 It is an option rather than a default, because it replaces measured reverse
 rates with values derived from mass differences. Pass `tabulate=True` if the
@@ -136,7 +146,8 @@ from nucnetpy import nuclear_energy_generation_rate, nuclear_energy_release
 ```
 
 The rate follows from the change in total mass excess,
-`eps = -N_A * sum_i (dY_i/dt) * dM_i`, so it needs no `Q`-values and cannot
+`eps = -N_A * C * sum_i (dY_i/dt) * dM_i`, where `C = 1.602176634e-6 erg/MeV`
+converts the mass excesses from MeV, so it needs no `Q`-values and cannot
 disagree with them where a rate library and a nuclide file are inconsistent.
 Neutrino losses are not subtracted.
 
