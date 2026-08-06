@@ -37,7 +37,7 @@ which routines were written by working from named C++ source files.
 - **Evolution** — one-zone and multi-zone integration with SciPy BDF/Radau/LSODA
   (plus fixed-step RK4 / implicit Euler fallbacks), an **analytic Jacobian** of
   the reaction flows (one sweep over the reaction list instead of `N+1`
-  right-hand-side evaluations — ~275x faster at 100 species), positivity
+  right-hand-side evaluations — over 100x faster at 100 species), positivity
   projection, and screening / weak-rate hooks. Choose the Jacobian with
   `evolve_zone(..., jac_mode="analytic"|"numerical"|"sparsity")`.
 - **NSE & QSE** — statistical weights use `(2J+1)·G(T)`, matching the libnucnet
@@ -270,7 +270,7 @@ both, as `Zone.temperature9()` and `Zone.density()` do, or read
 
 The reaction flows are monomials in the abundances, so the Jacobian is available
 in closed form and costs one sweep over the reaction list, against `N+1`
-right-hand-side evaluations for finite differences — about 275 times faster at
+right-hand-side evaluations for finite differences — over 100 times faster at
 one hundred species, and agreeing to the truncation error of the difference
 quotient.
 

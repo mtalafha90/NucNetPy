@@ -72,7 +72,7 @@ closed form and costs one sweep over the reaction list, against `N+1`
 right-hand-side evaluations for finite differences.
 
 ```python
-nn.evolve_zone(..., jac_mode="analytic")   # default; ~275x faster at 100 species
+nn.evolve_zone(..., jac_mode="analytic")   # default; >100x faster at 100 species
 nn.evolve_zone(..., jac_mode="numerical")  # finite differences
 nn.evolve_zone(..., jac_mode="sparsity")   # SciPy estimates it from the pattern
 ```
