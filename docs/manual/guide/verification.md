@@ -29,6 +29,15 @@ $$\delta_A(t)=\sum_i A_i\,\frac{dY_i}{dt}$$
 should stay at round-off, and $\sum_i A_iY_i$ should stay at its initial value.
 Track them along the whole trajectory, not only at the start.
 
+These are two different quantities and are worth keeping apart when you quote
+them. $\delta_A$ is a **rate**, in $\mathrm{s^{-1}}$: how fast the right-hand
+side fails to conserve baryon number at one instant. The departure of
+$\sum_i A_iY_i$ from unity is a **dimensionless** normalisation error of the
+composition itself. A third quantity — the baryon number a positivity
+projection had to manufacture, reported when a solve fails — is a dimensionless
+fraction of the initial amount, different again. On a well-behaved problem all
+three sit near round-off, which makes them easy to conflate.
+
 **Solver agreement.** Repeat the calculation with `bdf`, `radau` and `lsoda`.
 They should agree far more closely than any physical effect you care about.
 
