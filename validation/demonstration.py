@@ -1,13 +1,19 @@
 """Reproduce the demonstration calculation of the NucNetPy manuscript.
 
 The script runs a silicon-burning problem drawn entirely from a JINA /
-libnucnet database and checks the result against an independently computed
-nuclear statistical equilibrium (NSE) composition.  Time integration and the
-NSE solve share no numerical machinery: the first integrates ReacLib reaction
-flows in time, the second solves the Saha equations for the chemical
-potentials.  Their agreement is therefore a genuine consistency test of the
-rate evaluation, the stoichiometry, the detailed-balance reverse rates, and the
-equilibrium solver at once.
+libnucnet database and checks the result against a separately solved nuclear
+statistical equilibrium (NSE) composition.  As run here the two sides share no
+numerical input: the network integrates the library's own ReacLib forward and
+reverse fits in time, while the NSE solve builds the Saha equations from the
+mass table.  Their disagreement is therefore informative about the data, and
+is what the 4.5 per cent result measures.
+
+That independence does not survive rebuilding the reverse rates with
+consistent_reverse_network, which derives them from the same equilibrium
+prefactor solve_nse uses.  The parts-per-million agreement that follows
+measures how consistently the integrator, the stoichiometry and the
+equilibrium solver treat one shared formulation; it does not test the
+formulation itself.
 
 It writes a JSON record, LaTeX tables, and figures, so that every demonstration
 number and plot in the manuscript can be regenerated with one command.

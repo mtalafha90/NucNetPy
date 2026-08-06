@@ -1,0 +1,74 @@
+{
+  "comment": "Provenance of the third-party database the reference case was extracted from. The database itself is not redistributed; these records identify it.",
+  "schema": "libnucnet 2019-01-15",
+  "files": [
+    {
+      "role": "nuclides",
+      "name": "nuclides.xml",
+      "bytes": 18780082,
+      "sha256": "f6033a53a19546cf9af99a19867301e2402319e55485f6b2ef93e7fa4fc1587d",
+      "source_labels": {
+        "frdm": 4520,
+        "ame11": 2361,
+        "reac1": 887,
+        "ame11extrap": 84
+      }
+    },
+    {
+      "role": "reactions",
+      "name": "reaction_data.xml",
+      "bytes": 43992878,
+      "sha256": "3feffe3eb3ad51f1a6221e197246075175ab0e3cd6810ee291141073218f0054",
+      "source_labels": {
+        "rath": 48746,
+        "mo03": 12094,
+        "ths8": 9764,
+        "pkrF": 4906,
+        "wc12": 3148,
+        "kd02": 664,
+        "bkmo": 413,
+        "rpsm": 372,
+        "pkrH": 356,
+        "mo92": 314,
+        "bqa+": 213,
+        "il10": 104
+      }
+    }
+  ],
+  "parsed": {
+    "nuclide_file_entries": 7852,
+    "species_in_memory": 8131,
+    "placeholders_without_nuclear_data": 279,
+    "reactions": 81758,
+    "load_seconds": 27.318453557999987
+  },
+  "extraction": {
+    "species_kept": [
+      "gamma",
+      "n",
+      "h1",
+      "he4",
+      "c12",
+      "o16",
+      "ne20",
+      "mg24",
+      "si28",
+      "s32",
+      "ar36",
+      "ca40",
+      "ti44",
+      "cr48",
+      "fe52",
+      "ni56"
+    ],
+    "note": "gamma is retained so photodisintegration records survive the cut"
+  },
+  "environment": {
+    "nucnetpy": "1.0.0",
+    "python": "3.11.15",
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "platform": "Linux-6.18.5-fc-v18-x86_64-with-glibc2.39",
+    "processor": "x86_64"
+  }
+}

@@ -9,6 +9,10 @@ include pyproject.toml
 
 recursive-include tests *.py *.json *.xml *.txt *.csv
 recursive-include validation *.py
+# The reference case: the extracted network, its expected output and the
+# provenance of the database it came from.  This is the sample input and output
+# that ships with the program, so it must be in the sdist.
+recursive-include validation/reference *.xml *.json *.md
 recursive-include examples *.py
 recursive-include notebooks *.ipynb *.md *.xml *.txt *.csv
 recursive-include docs *.md *.pdf

@@ -1,0 +1,80 @@
+{
+  "case": "silicon burning",
+  "description": "Pure Si-28 burned to its stationary composition and compared with a separately solved NSE.",
+  "conditions": {
+    "t9": 5.0,
+    "rho": 100000000.0,
+    "t_end": 10.0,
+    "steps": 120,
+    "method": "bdf",
+    "rtol": 1e-08,
+    "atol": 1e-14,
+    "initial_abundances": {
+      "si28": 0.03571428571428571
+    },
+    "initial_ye": 0.5
+  },
+  "network": {
+    "file": "si_burning_network.xml",
+    "sha256": "c3d0e03575a9d393dc79c98d00b458792d8a4909f1f02541f119ab76d81bf74e",
+    "species": 15,
+    "reactions": 32
+  },
+  "expected": {
+    "evolve_success": true,
+    "final_abundances": {
+      "ar36": 0.00013563456738687873,
+      "c12": 2.6468763296890833e-09,
+      "ca40": 0.0002750825376698011,
+      "cr48": 5.869444200653027e-05,
+      "fe52": 0.0009205137714104778,
+      "h1": 0.0,
+      "he4": 0.0012263206299244066,
+      "mg24": 4.783121022714243e-08,
+      "n": 0.0,
+      "ne20": 1.0652681920158933e-10,
+      "ni56": 0.016432541506533893,
+      "o16": 9.371675921893721e-09,
+      "s32": 0.0001656765411014365,
+      "si28": 9.691656124953816e-05,
+      "ti44": 6.4898415405659785e-06
+    },
+    "final_xsum": 0.9999999999949041,
+    "nse_success": true,
+    "nse_abundances": {
+      "ar36": 0.0001375811664976448,
+      "c12": 2.614418856275704e-09,
+      "ca40": 0.0002642487058207741,
+      "cr48": 0.00011268553529185339,
+      "fe52": 0.0015264180175316808,
+      "h1": 3.154714057732051e-06,
+      "he4": 0.0012212416081469112,
+      "mg24": 5.6553347495572665e-08,
+      "n": 3.1547140577039586e-06,
+      "ne20": 1.1590286211111409e-10,
+      "ni56": 0.0158258569625507,
+      "o16": 9.22080337620694e-09,
+      "s32": 0.00016543884956821952,
+      "si28": 0.00010184816251477352,
+      "ti44": 9.270253708798537e-06
+    },
+    "nse_mu_p": -3.448779128927869,
+    "nse_mu_n": -1.633832494726303,
+    "nse_xsum": 1.0000000000000062,
+    "nse_ye": 0.5000000000000031
+  },
+  "tolerances": {
+    "comment": "Abundances are compared with numpy.isclose using these values. They are loose enough to absorb BLAS and library differences between platforms and tight enough that a change in the physics fails the check.",
+    "rtol": 1e-06,
+    "atol": 1e-18,
+    "xsum_atol": 1e-09
+  },
+  "environment": {
+    "nucnetpy": "1.0.0",
+    "python": "3.11.15",
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "platform": "Linux-6.18.5-fc-v18-x86_64-with-glibc2.39",
+    "processor": "x86_64"
+  }
+}
