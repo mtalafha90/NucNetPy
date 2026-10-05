@@ -244,12 +244,19 @@ class ReactionNetwork:
         return {r.string: r.flux(abundances, t9=t9, rho=rho, screening=screening, ye=ye) for r in self.reactions}
 
     def ydot(self, abundances: Mapping[str, float], t9: float, rho: float = 1.0, screening: Optional[Callable[[Reaction, float, float, Optional[float]], float]] = None, ye: Optional[float] = None) -> Dict[str, float]:
+        """Return ``dY/dt`` for every nuclide the reactions touch.
+
+        Photons and leptons are left out: they are not part of the abundance
+        vector, so a ``dY/dt`` for them would be a meaningless number that
+        downstream diagnostics would report as if it were a species.
+        """
         _refresh_screening(screening, abundances, t9, rho, ye)
         out: Dict[str, float] = defaultdict(float)
         for r in self.reactions:
             f = r.flux(abundances, t9=t9, rho=rho, screening=screening, ye=ye)
             for name, nu in r.stoichiometry().items():
-                out[name] += nu * f
+                if not is_massless(name):
+                    out[name] += nu * f
         return dict(out)
 
     def species_names(self) -> List[str]:

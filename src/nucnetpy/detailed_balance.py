@@ -137,7 +137,7 @@ def _exact_reverse_reaction(forward: Reaction, species_map: Mapping[str, Species
 def consistent_reverse_network(network, t9_grid: Optional[Sequence[float]] = None,
                                include_partition: bool = True,
                                tabulate: bool = False):
-    """Return a copy of ``network`` whose reverse rates obey detailed balance.
+    r"""Return a copy of ``network`` whose reverse rates obey detailed balance.
 
     Rate libraries such as JINA ReacLib supply the forward and reverse
     directions of a reaction as separately fitted expressions.  Their ratio is
@@ -203,24 +203,44 @@ def consistent_reverse_network(network, t9_grid: Optional[Sequence[float]] = Non
     return out
 
 
+def reverse_flux(reaction: Reaction, species_map: Mapping[str, Species],
+                 abundances: Mapping[str, float], t9: float, rho: float = 1.0,
+                 include_partition: bool = True) -> float:
+    """Return the detailed-balance reverse flux of ``reaction`` at this composition.
+
+    This is the flux the inverse reaction would carry with the rate from
+    :func:`reverse_rate`, in the same units as :meth:`Reaction.flux`.
+    """
+    product = 1.0
+    for p in reaction.products:
+        if _nuclear(species_map, p.species) is None:
+            continue
+        product *= max(float(abundances.get(p.species, 0.0)), 0.0) ** p.count
+    if product == 0.0:
+        return 0.0          # avoids inf * 0 when the reverse rate overflows
+    lam_r = reverse_rate(reaction, species_map, t9, rho=rho, include_partition=include_partition)
+    s_rev, n_p = _side_stat_and_order(reaction.products, species_map)
+    return float(lam_r * (float(rho) ** max(n_p - 1, 0)) / max(s_rev, 1) * product)
+
+
 def net_flows(network, abundances: Mapping[str, float], t9: float, rho: float = 1.0, include_partition: bool = True) -> Dict[str, Tuple[float, float, float]]:
     """Return ``{reaction: (forward, reverse, net)}`` fluxes for a network.
 
     The forward flux follows :meth:`Reaction.flux`; the reverse flux uses the
     detailed-balance rate with the product abundances.  At NSE abundances the
     net flux of every balanced reaction vanishes.
+
+    Every listed reaction is given its own detailed-balance reverse, including
+    one whose inverse the network also lists explicitly, as JINA networks do.
+    The entries for such a pair therefore describe the same process twice; do
+    not add them up.  :func:`nucnetpy.analysis.entropy_generation_rate` and
+    :func:`nucnetpy.analysis.integrated_currents` handle pairs correctly.
     """
     out: Dict[str, Tuple[float, float, float]] = {}
     species_map = network.species
     for r in network.reactions.reactions:
         fwd = r.flux(abundances, t9=t9, rho=rho)
-        lam_r = reverse_rate(r, species_map, t9, rho=rho, include_partition=include_partition)
-        s_rev, n_p = _side_stat_and_order(r.products, species_map)
-        rev = lam_r * (float(rho) ** max(n_p - 1, 0)) / max(s_rev, 1)
-        for p in r.products:
-            if _nuclear(species_map, p.species) is None:
-                continue
-            y = max(float(abundances.get(p.species, 0.0)), 0.0)
-            rev *= y ** p.count
+        rev = reverse_flux(r, species_map, abundances, t9, rho=rho,
+                           include_partition=include_partition)
         out[r.string] = (float(fwd), float(rev), float(fwd - rev))
     return out

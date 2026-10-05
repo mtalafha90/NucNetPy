@@ -188,6 +188,52 @@ def neutron_exposure(result, thermo) -> float:
     return tau_cm2 * 1.0e-27  # cm^-2 -> mb^-1
 
 
+#: Abundance at or below which a species counts as absent, as in NucNet Tools.
+_ABSENT_ABUNDANCE = 1.0e-100
+
+
+def _all_present(reaction, abundances: Mapping[str, float]) -> bool:
+    """True if every nuclide the reaction touches has a non-negligible abundance."""
+    from .species import is_massless
+    return all(float(abundances.get(p.species, 0.0)) > _ABSENT_ABUNDANCE
+               for p in reaction.reactants + reaction.products
+               if not is_massless(p.species))
+
+
+def _forward_fluxes(network: Network, abundances: Mapping[str, float],
+                    t9: float, rho: float) -> Dict[tuple, float]:
+    """Forward flux of each distinct reaction, keyed by ``Reaction.key``.
+
+    Reactions listed more than once with the same reactants and products are
+    added together.
+    """
+    from collections import defaultdict
+    forward: Dict[tuple, float] = defaultdict(float)
+    for r in network.reactions.reactions:
+        forward[r.key] += r.flux(abundances, t9=t9, rho=rho)
+    return dict(forward)
+
+
+def _reverse_fluxes(network: Network, forward: Mapping[tuple, float],
+                    abundances: Mapping[str, float], t9: float, rho: float) -> Dict[tuple, float]:
+    """Reverse flux of each distinct reaction, keyed by ``Reaction.key``.
+
+    This is the flux of the inverse reaction when the network lists it, which
+    is what the calculation actually evolves, and the detailed-balance value
+    otherwise.
+    """
+    from collections import defaultdict
+    from .detailed_balance import reverse_flux
+    reverse: Dict[tuple, float] = defaultdict(float)
+    for r in network.reactions.reactions:
+        inverse = (r.key[1], r.key[0])
+        if inverse in forward and inverse != r.key:
+            reverse[r.key] = forward[inverse]
+        else:
+            reverse[r.key] += reverse_flux(r, network.species, abundances, t9, rho=rho)
+    return dict(reverse)
+
+
 def reaction_entropy_changes(network: Network, abundances: Mapping[str, float], t9: float, rho: float) -> Dict[str, float]:
     """Return per-reaction entropy change ΔS in units of k_B per reaction.
 
@@ -195,6 +241,12 @@ def reaction_entropy_changes(network: Network, abundances: Mapping[str, float], 
     ``mu_i/kT = ln Y_i - ln pref_i``; this equals the C++ per-reaction
     ``Q/kT + sum_r ln(Y/Y_Q) - sum_p ln(Y/Y_Q)`` of NucNet Tools
     ``flow_utilities.cpp`` and, under detailed balance, ``ln(f/r)``.
+
+    ΔS is formally infinite for a reaction that involves an absent species,
+    because ``ln Y`` diverges as ``Y`` tends to zero.  Such an abundance is
+    replaced by 1e-300 here, so the value returned for that reaction reflects
+    the floor rather than the physics; :func:`entropy_generation_rate` leaves
+    those reactions out.
     """
     from .nse import _log_prefactor
     import math
@@ -220,24 +272,49 @@ def entropy_generation_rate(network: Network, zone_index: int = 0, t9: Optional[
     """Return dS/dt per nucleon in units of k_B per second.
 
     Ports NucNet Tools ``compute_entropy_generation_rate``: the sum over
-    reactions of ``(f - r) * ΔS`` with ``r`` the detailed-balance reverse flux
-    and ``ΔS = ln(f/r)`` per reaction, so every term is non-negative and the
-    total vanishes at NSE (blog series "Computing the entropy generation
-    rate").  With ``use_reverse=False`` only forward fluxes are used
-    (``dS/dt = -sum_i (mu_i/kT) dY_i/dt``).  Electron/neutrino chemical
-    potential terms of the C++ version are not included; nucnetpy networks
-    carry weak reactions with their own tabulated rates instead.
+    reactions of ``(f - r) * ΔS``, where ``ΔS`` is the per-reaction entropy
+    change of :func:`reaction_entropy_changes` (blog series "Computing the
+    entropy generation rate").  Each forward/reverse pair is counted once.
+    When the network lists the inverse of a reaction, as JINA networks do,
+    ``r`` is that inverse's own flux, so the result is exactly
+    ``-sum_i (mu_i/kT) dY_i/dt`` for the network being evolved.  Otherwise
+    ``r`` is the detailed-balance reverse flux, as in NucNet Tools.  With
+    reverse rates that obey detailed balance every term equals
+    ``(f - r) ln(f/r)``, so the total is non-negative and vanishes at NSE.
+
+    With ``use_reverse=False`` only the listed reactions are used, each with
+    its forward flux: ``sum_r f_r ΔS_r = -sum_i (mu_i/kT) dY_i/dt`` for exactly
+    the network as given, with no detailed-balance reverses implied.
+
+    Reactions that involve an absent species (``Y <= 1e-100``, the NucNet
+    Tools threshold) are left out.  Creating a species from zero abundance
+    produces formally infinite entropy, so any finite value for such a
+    reaction would be set by an arbitrary floor rather than by the physics;
+    treat the total for a composition with absent species as a lower bound.
+    (NucNet Tools skips a reaction when its forward flux vanishes, and drops
+    the logarithm of an absent product, which can give a term of the wrong
+    sign.)
+
+    Electron and neutrino chemical-potential terms of the C++ version are not
+    included; nucnetpy networks carry weak reactions with their own tabulated
+    rates instead.
     """
     z = network.zone(zone_index)
     t9 = t9 or z.temperature9(); rho = rho or z.density()
-    ds = reaction_entropy_changes(network, z.abundances, t9, rho)
-    if use_reverse:
-        from .detailed_balance import net_flows
-        flows_frn = net_flows(network, z.abundances, t9=t9, rho=rho)
-        return float(sum(flows_frn[key][2] * ds[key] for key in ds))
+    abundances = z.abundances
+    ds = reaction_entropy_changes(network, abundances, t9, rho)
+    reactions = [r for r in network.reactions.reactions if _all_present(r, abundances)]
+    if not use_reverse:
+        return float(sum(r.flux(abundances, t9=t9, rho=rho) * ds[r.string] for r in reactions))
+    forward = _forward_fluxes(network, abundances, t9, rho)
+    reverse = _reverse_fluxes(network, forward, abundances, t9, rho)
     total = 0.0
-    for r in network.reactions.reactions:
-        total += r.flux(z.abundances, t9=t9, rho=rho) * ds[r.string]
+    counted = set()
+    for r in reactions:
+        if r.key in counted:
+            continue
+        counted.update({r.key, (r.key[1], r.key[0])})
+        total += (forward[r.key] - reverse[r.key]) * ds[r.string]
     return float(total)
 
 
@@ -251,21 +328,28 @@ def integrated_currents(network: Network, result, thermo, use_reverse: bool = Tr
     net number of transitions per nucleon it produced over the calculation
     (blog: "Creating integrated currents diagrams", "Analyzing integrated
     currents quantitatively").
+
+    The reverse flux is the flux of the inverse reaction when the network
+    lists it, and the detailed-balance value otherwise.  A pair listed in both
+    directions therefore appears twice, with equal and opposite currents.
+    With ``use_reverse=False`` each entry is the reaction's own forward
+    current.  Reactions listed more than once are added together.
     """
-    from .detailed_balance import net_flows
     times = np.asarray(result.time, dtype=float)
-    strings = [r.string for r in network.reactions.reactions]
-    rates = np.zeros((len(times), len(strings)))
+    keys = list(dict.fromkeys(r.key for r in network.reactions.reactions))
+    strings = {r.key: r.string for r in network.reactions.reactions}
+    rates = np.zeros((len(times), len(keys)))
     for i, t in enumerate(times):
         abund = {s: float(v) for s, v in zip(result.species, result.y[i])}
         t9, rho = thermo(float(t), abund)
+        forward = _forward_fluxes(network, abund, t9, rho)
         if use_reverse:
-            frn = net_flows(network, abund, t9=t9, rho=rho)
-            rates[i] = [frn[s][2] for s in strings]
+            reverse = _reverse_fluxes(network, forward, abund, t9, rho)
+            rates[i] = [forward[k] - reverse[k] for k in keys]
         else:
-            rates[i] = [r.flux(abund, t9=t9, rho=rho) for r in network.reactions.reactions]
+            rates[i] = [forward[k] for k in keys]
     trapezoid = getattr(np, "trapezoid", None) or np.trapz  # numpy < 2.0 compat
-    return {s: float(trapezoid(rates[:, j], times)) for j, s in enumerate(strings)}
+    return {strings[k]: float(trapezoid(rates[:, j], times)) for j, k in enumerate(keys)}
 
 
 def nuclear_energy_generation_rate(network: Network, zone_index: int = 0,
