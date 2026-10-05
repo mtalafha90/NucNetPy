@@ -26,6 +26,12 @@ _SCIPY_METHODS = {
     "rk45": "RK45",
     "dop853": "DOP853",
 }
+#: Fixed-step integrators implemented here.  They take one step per interval
+#: of the time grid, so the grid itself sets the accuracy.
+_FIXED_STEP_METHODS = ("rk4", "euler", "implicit_euler", "backward_euler")
+#: Every method name accepted by :func:`evolve_zone` (case-insensitive).
+METHODS = tuple(_SCIPY_METHODS) + _FIXED_STEP_METHODS
+_JAC_MODES = ("analytic", "numerical", "sparsity")
 
 
 def constant_thermo(t9: float = 1.0, rho: float = 1.0) -> ThermoFunction:
@@ -246,10 +252,18 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
     Note that SciPy applies ``jac_sparsity`` only when no Jacobian callable is
     given, so the pattern and an explicit Jacobian are alternatives rather than
     complements.
+
+    ``method`` is one of :data:`METHODS`, in any case.  An unrecognised name
+    raises ``ValueError`` rather than falling back to another integrator.
     """
     ts = np.asarray(times, dtype=float)
     if ts.ndim != 1 or len(ts) < 2:
         raise ValueError("times must be a one-dimensional array with at least two points")
+    method_l = str(method).lower()
+    if method_l not in METHODS:
+        raise ValueError(f"unknown method {method!r}; choose one of: {', '.join(METHODS)}")
+    if str(jac_mode).lower() not in _JAC_MODES:
+        raise ValueError(f"unknown jac_mode {jac_mode!r}; choose one of: {', '.join(_JAC_MODES)}")
     # Photons and leptons are part of the reaction records but not of the
     # abundance vector; evolving them would integrate a meaningless quantity.
     species = [normalize_species_name(s) for s in (species or network.species_names())]
@@ -257,7 +271,6 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
     y0 = np.array([zone.get_abundance(s) for s in species], dtype=float)
     thermo = thermo or zone_thermo(zone)
     f = rhs(network, species, thermo, screening=screening, weak_rates=weak_rates)
-    method_l = method.lower()
     if method_l in _SCIPY_METHODS:
         try:
             from scipy.integrate import solve_ivp
