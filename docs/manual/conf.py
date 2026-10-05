@@ -58,3 +58,9 @@ myst_enable_extensions = ["dollarmath", "colon_fence"]
 html_theme = "furo"
 html_title = f"NucNetPy {release}"
 html_static_path = []
+
+# rinohtype writes the PDF directly rather than through LaTeX.  Left to itself
+# it derives the document from the LaTeX settings, where Sphinx has escaped the
+# author's initials for LaTeX ("M.\@{} H.\@{} ..."), and prints the escapes
+# literally on the title page and in the PDF metadata.
+rinoh_documents = [dict(doc=master_doc, target="nucnetpy", title=project, author=author)]

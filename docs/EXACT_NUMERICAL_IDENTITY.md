@@ -21,8 +21,8 @@ Agreement has to be shown by comparison, not asserted.
 
 ## How to compare with a C++ build you run yourself
 
-The repository carries the machinery for this; see
-[`PURE_PYTHON_PORT_STATUS.md`](PURE_PYTHON_PORT_STATUS.md) for the details.
+The repository carries the machinery for this; the port status notes
+(`docs/PURE_PYTHON_PORT_STATUS.md`) describe it in detail.
 
 1. Run the original NucNet Tools on the inputs in `tests/golden/` (or replace
    those inputs with your own network and run both codes on them).

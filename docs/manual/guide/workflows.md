@@ -140,6 +140,13 @@ fused compound charge. Being a chemical potential, it applies consistently to
 forward and reverse rates, so screening does not undo detailed balance. A
 pairwise Salpeter factor is also available through `reaction_screening_factor`.
 
+The default treats the electrons as fully degenerate, so only the ions screen.
+Where the electrons are not degenerate, as in hydrogen and helium burning in
+ordinary stars, pass `pair_term=Ye` (for example
+`SkyNetScreening(net.species, pair_term=0.5)`). That recovers the Salpeter weak
+limit; without it the weak-screening exponent is too small by up to a factor
+`sqrt(1 + Ye / sum Z^2 Y)`, 22 per cent for pure helium.
+
 ## Energy release
 
 ```python

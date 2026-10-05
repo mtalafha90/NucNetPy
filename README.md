@@ -60,8 +60,8 @@ which routines were written by working from named C++ source files.
 - **Screening** — `SkyNetScreening` assigns each charge a Coulomb chemical
   potential mu(Z)/kT, blending weak, intermediate and strong regimes. Because it
   is a chemical potential it applies consistently to forward and reverse rates,
-  so screening does not break detailed balance. Reproduces the Salpeter weak
-  limit to 0.02%.
+  so screening does not break detailed balance. With `pair_term=Ye` for
+  non-degenerate electrons it reproduces the Salpeter weak limit to 0.02%.
 - **Detailed balance** — reverse reaction rates from the forward rate, masses,
   and partition functions; forward/reverse/net flows that vanish at NSE;
   tabulated photodisintegration partners for (n,γ)-(γ,n) studies.
@@ -292,13 +292,20 @@ the pattern and an explicit Jacobian are alternatives, not complements.
 `mu(Z)/kT` and enhances a reaction by the difference between the separated
 reactants and the fused compound charge. It extends to more than two charged
 reactants and, being a chemical potential, applies consistently to forward and
-reverse rates, so screening does not undo detailed balance. It reproduces the
-Salpeter weak-screening limit to 0.02 per cent.
+reverse rates, so screening does not undo detailed balance.
+
+Its default treats the electrons as fully degenerate, so only the ions screen.
+Where the electrons are not degenerate, as in hydrogen and helium burning in
+ordinary stars, pass `pair_term=Ye`; it then reproduces the Salpeter
+weak-screening limit to 0.02 per cent. Without it the weak-screening exponent
+is too small by up to a factor `sqrt(1 + Ye / sum Z^2 Y)`, 22 per cent for
+pure helium.
 
 ```python
 from nucnetpy import SkyNetScreening
 
 evolve_zone(net, zone, times, thermo=..., screening=SkyNetScreening(net.species))
+evolve_zone(net, zone, times, thermo=..., screening=SkyNetScreening(net.species, pair_term=0.5))  # Ye = 0.5, non-degenerate
 ```
 
 The nuclear energy generation rate follows from the change in total mass excess,
