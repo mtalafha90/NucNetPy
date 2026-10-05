@@ -196,15 +196,16 @@ your first production run.
 
 ### Keep `gamma` when you cut a network
 
-`limit_network` retains only reactions whose participants *all* survive the cut,
-and `select_species` returns nuclides. Drop the photon and every
-photodisintegration goes with it — silently — and with it the network's ability
-to reach equilibrium at all:
+`limit_network` keeps every reaction whose nuclides all survive the cut.
+Photons and leptons never decide the outcome, so photodisintegrations among the
+kept nuclides stay, and with them the network's ability to reach equilibrium.
+(Development versions before the 1.0.0 release dropped them unless `"gamma"`
+was listed; listing it is still harmless.)
 
 ```python
 from nucnetpy.network_limiter import select_species, limit_network
 
-limit_network(net, select_species(net, zmax=20, amax=44) + ["gamma"])
+limit_network(net, select_species(net, zmax=20, amax=44))
 ```
 
 Photons and leptons are reaction *participants*, not nuclides. They balance

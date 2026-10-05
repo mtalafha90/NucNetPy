@@ -52,13 +52,12 @@ conservation, species lacking nuclear data, and sample rates.
 Both have their own section in the notebooks, but they are worth stating here
 because neither announces itself with an error message.
 
-**Keep `gamma` when you cut a network.** `limit_network` retains only reactions
-whose participants all survive the cut, and `select_species` returns nuclides.
-Drop the photon and every photodisintegration goes with it — silently, and with
-it the network's ability to reach equilibrium:
+**Cutting a network keeps its photodisintegrations.** `limit_network` keeps
+every reaction whose nuclides all survive the cut; photons and leptons never
+decide the outcome, so listing `"gamma"` is harmless but no longer needed:
 
 ```python
-limit_network(net, select_species(net, zmax=20, amax=44) + ["gamma"])
+limit_network(net, select_species(net, zmax=20, amax=44))
 ```
 
 **A network relaxes to the equilibrium of the rates it is given**, which is not

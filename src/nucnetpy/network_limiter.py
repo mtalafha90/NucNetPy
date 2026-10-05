@@ -28,17 +28,32 @@ def select_species(network, zmin: Optional[int] = None, zmax: Optional[int] = No
 
 
 def limit_network(network, species: Iterable[str], include_linked: bool = False):
-    keep: Set[str] = {normalize_species_name(s) for s in species}
+    """Restrict ``network`` in place to the given nuclides and the reactions among them.
+
+    A reaction survives if every nuclide it involves is kept.  Photons and
+    leptons are not nuclides, so they never decide the outcome: a
+    photodisintegration among kept nuclides survives whether or not ``"gamma"``
+    is listed, and listing it is harmless.  With ``include_linked`` the kept set
+    grows to every nuclide that shares a reaction with it; the photon does not
+    count as a link, or every photon reaction would join the network.
+    """
+    from .species import is_massless
+
+    def nuclides(reaction) -> Set[str]:
+        return {p.species for p in reaction.reactants + reaction.products
+                if not is_massless(p.species)}
+
+    keep: Set[str] = {normalize_species_name(s) for s in species if not is_massless(s)}
     if include_linked:
         changed = True
         while changed:
             changed = False
             for r in network.reactions.reactions:
-                names = {p.species for p in (r.reactants + r.products)}
+                names = nuclides(r)
                 if names & keep and not names <= keep:
                     keep |= names; changed = True
-    network.species = {k:v for k,v in network.species.items() if k in keep}
-    network.reactions.reactions = [r for r in network.reactions.reactions if all(p.species in keep for p in r.reactants + r.products)]
+    network.species = {k: v for k, v in network.species.items() if k in keep or is_massless(k)}
+    network.reactions.reactions = [r for r in network.reactions.reactions if nuclides(r) <= keep]
     for z in network.zones:
-        z.abundances = {k:v for k,v in z.abundances.items() if k in keep}
+        z.abundances = {k: v for k, v in z.abundances.items() if k in keep or is_massless(k)}
     return network

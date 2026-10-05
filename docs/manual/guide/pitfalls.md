@@ -8,18 +8,21 @@ implementation, so it is worth knowing whichever code you use.
 
 ## Dropping the photon when you cut a network
 
-`limit_network` retains only reactions whose participants *all* survive the
-cut, and `select_species` returns nuclides. The photon is not a nuclide, so:
+A code that keeps a reaction only if *all* its participants survive a cut, and
+cuts by a list of nuclides, discards every photodisintegration, because the
+photon is not a nuclide. Nothing warns you. The network simply cannot reach
+equilibrium, and a silicon-burning calculation will not start at all, because
+it begins with $^{28}\mathrm{Si}(\gamma,\alpha)^{24}\mathrm{Mg}$.
+
+`limit_network` avoids this: only nuclides decide whether a reaction survives,
+so photons and leptons are kept automatically and listing `"gamma"` is
+harmless. Development versions of NucNetPy before the 1.0.0 release fell into
+the trap too, and with `include_linked=True` they also treated the photon as a
+link between otherwise unrelated reactions:
 
 ```python
-limit_network(net, select_species(net, zmax=20))            # wrong
-limit_network(net, select_species(net, zmax=20) + ["gamma"]) # right
+limit_network(net, select_species(net, zmax=20))   # keeps the photodisintegrations
 ```
-
-Without it, every photodisintegration is discarded. Nothing warns you. The
-network simply cannot reach equilibrium, and a silicon-burning calculation will
-not start at all, because it begins with
-$^{28}\mathrm{Si}(\gamma,\alpha)^{24}\mathrm{Mg}$.
 
 ## Assuming reverse rates are consistent with the masses
 

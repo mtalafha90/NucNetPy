@@ -39,12 +39,12 @@ A one-zone calculation rarely needs the whole chart of nuclides.
 ```python
 from nucnetpy.network_limiter import select_species, limit_network
 
-limit_network(net, select_species(net, zmax=20, amax=44) + ["gamma"])
+limit_network(net, select_species(net, zmax=20, amax=44))
 ```
 
-**Keep `gamma`.** `limit_network` retains only reactions whose participants all
-survive the cut, and `select_species` returns nuclides, so dropping the photon
-silently deletes every photodisintegration. See {doc}`pitfalls`.
+`limit_network` keeps every reaction whose nuclides all survive the cut.
+Photons and leptons never decide the outcome, so the photodisintegrations stay;
+listing `"gamma"` is harmless. See {doc}`pitfalls` for why this matters.
 
 ## Evolving one zone
 

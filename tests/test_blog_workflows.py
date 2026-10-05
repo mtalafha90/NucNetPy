@@ -188,3 +188,31 @@ def test_select_species_and_limit():
     assert set(net.species) == {"he4", "be8", "c12"}
     assert all(all(p.species in net.species for p in r.reactants + r.products)
                for r in net.reactions.reactions)
+
+
+def _two_chains():
+    net = Network()
+    for name in ["he4", "c12", "o16", "h1", "h2", "he3"]:
+        net.add_species(Species.parse(name))
+    net.reactions.add(Reaction.from_names(["c12", "he4"], ["o16", "gamma"], constant_rate=1.0))
+    net.reactions.add(Reaction.from_names(["o16", "gamma"], ["c12", "he4"], constant_rate=1.0))
+    net.reactions.add(Reaction.from_names(["h1", "h2"], ["he3", "gamma"], constant_rate=1.0))
+    return net
+
+
+def test_limiting_keeps_photon_reactions_without_listing_gamma():
+    # Cutting to a set of nuclides must not discard photodisintegrations:
+    # the photon is not a nuclide, so it never decides whether a reaction stays.
+    import copy
+    net = _two_chains()
+    a = limit_network(copy.deepcopy(net), ["he4", "c12", "o16"])
+    b = limit_network(copy.deepcopy(net), ["he4", "c12", "o16", "gamma"])
+    assert [r.string for r in a.reactions.reactions] == [r.string for r in b.reactions.reactions]
+    assert len(a.reactions.reactions) == 2
+
+
+def test_the_photon_is_not_a_link_between_unrelated_reactions():
+    import copy
+    for extra in ([], ["gamma"]):
+        out = limit_network(copy.deepcopy(_two_chains()), ["c12"] + extra, include_linked=True)
+        assert set(out.species) == {"c12", "he4", "o16"}
