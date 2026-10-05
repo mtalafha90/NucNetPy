@@ -13,7 +13,7 @@ partition functions, Coulomb corrections, and numerical tolerances.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 import math
 import numpy as np
 

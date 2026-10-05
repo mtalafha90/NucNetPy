@@ -24,8 +24,8 @@ Cluster membership is by species name; use
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 
@@ -85,7 +85,6 @@ def solve_qse(network: Network, t9: float, rho: float, ye: float, clusters: Sequ
         raise ValueError("No valid species available for QSE solve")
 
     idx = {sp.name: k for k, sp in enumerate(sps)}
-    n_c = len(clusters)
     member = np.full(len(sps), -1, dtype=int)  # cluster index per species, -1 = free
     for c, cl in enumerate(clusters):
         if float(cl.constraint) <= 0.0:
