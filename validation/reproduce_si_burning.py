@@ -142,7 +142,7 @@ def main() -> int:
     # The detailed-balance variant, which is the article's headline number.
     if "detailed_balance" in exp:
         from nucnetpy.detailed_balance import consistent_reverse_network
-        dbtol = tol.get("detailed_balance_rtol", 1.0e-3)
+        dbtol = tol.get("detailed_balance_rtol", 1.0e-2)
         for label, want in exp["detailed_balance"].items():
             dnet = consistent_reverse_network(read_xml(str(network_path)),
                                               tabulate=(label == "tabulated"))

@@ -5,7 +5,8 @@ is rebuilt whenever an option changes:
 
     python docs/manual/generate_cli_reference.py
 
-``make -C docs/manual pdf`` and ``html`` run this first.
+``make -C docs/manual pdf`` and ``html`` run this first.  Use Python 3.10,
+3.11 or 3.12: argparse words its help differently on 3.9 and 3.13.
 """
 from __future__ import annotations
 

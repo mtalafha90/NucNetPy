@@ -78,7 +78,8 @@
     "rtol": 1e-06,
     "atol": 1e-18,
     "xsum_atol": 1e-09,
-    "detailed_balance_rtol": 0.001
+    "detailed_balance_rtol": 0.01,
+    "detailed_balance_comment": "The detailed-balance figures are residuals at the integrator's tolerance, so they move with floating-point details: GitHub's runners give a median of 6.958e-08 against 6.966e-08 here, a difference of 0.11 per cent. They are compared to 1 per cent with no absolute floor, which keeps the two figures quoted in the documentation; losing detailed balance changes them by orders of magnitude."
   },
   "environment": {
     "nucnetpy": "1.0.0",

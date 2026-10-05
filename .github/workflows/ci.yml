@@ -33,6 +33,9 @@ jobs:
           nucnetpy nse tests/golden/golden_network.xml --t9 5 --rho 1e8 --ye 0.5 > /dev/null
           python examples/use_nucnetpy.py > /dev/null
       - name: Command-line reference is up to date
+        # argparse words its help differently on 3.9 and 3.13, and the page is
+        # generated with 3.10-3.12, so check it on one of those.
+        if: matrix.python-version == '3.11'
         run: |
           python docs/manual/generate_cli_reference.py
           git diff --exit-code docs/manual/reference/cli.md
