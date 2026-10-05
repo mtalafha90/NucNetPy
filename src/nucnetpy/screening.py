@@ -153,11 +153,16 @@ class SkyNetScreening:
     ``mu_i = -0.380 lambda_0^b eta_b Z^(b+1)`` with ``b = 0.860``; and strong
     screening from a one-component-plasma fit.
 
-    The electron-positron pair contribution to ``zeta``, which requires the
-    electron degeneracy parameter from an equation of state, is not included.
-    Pass ``pair_term`` if it is available.  Neglecting it is accurate while
-    pairs are unimportant, which covers ordinary stellar and explosive burning,
-    but it should not be relied on where positrons are abundant.
+    ``zeta`` here contains only the ions, ``zeta^2 = sum Z^2 Y / sum Y``.  In
+    SkyNet the Debye sum also runs over the electrons and positrons, with a
+    weight set by their degeneracy from an equation of state.  That term is
+    supplied through ``pair_term``, which is added to ``sum Z^2 Y``; the
+    default of zero is the limit of strongly degenerate electrons, which do
+    not screen.  For non-degenerate electrons, as in hydrogen and helium
+    burning in ordinary stars, pass ``pair_term = Ye``: this recovers
+    Salpeter's ``zeta^2 = sum (Z^2 + Z) Y`` exactly.  Leaving it at zero there
+    underestimates the weak-screening exponent by a factor
+    ``sqrt(1 + Ye / sum Z^2 Y)``, about 22 per cent for pure helium-4.
 
     The object is a callable suitable for the ``screening`` argument of
     :func:`nucnetpy.evolve_zone`.  It caches ``mu(Z)`` and recomputes it in

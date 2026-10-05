@@ -36,7 +36,6 @@ are omitted.
 | Plotting isotopic abundances versus time | `species_history`, `EvolutionResult.mass_fraction_history` |
 | **Computing separation energies** | **`separation_energy` (proton branch fixed)** |
 | **Computing/understanding the entropy generation rate (incl. weak decay)** | **`entropy_generation_rate` (new), CLI `entropy-generation`** |
-| Inverting the entropy to find the density | `thermo.density_from_entropy`, `temperature_from_entropy` |
 | Computing thermodynamic quantities | `thermo` |
 | Defining your own thermodynamic (trajectory) function | `ThermoFunction` callables, `hydro.Trajectory` |
 | Using a thermodynamic trajectory file | `read_trajectory` |
@@ -74,7 +73,9 @@ named C++ files:
 
 | Blog workflow | Status |
 |---|---|
-| Constant-entropy evolution with self-consistent entropy inverter | partial — `thermo` inverters exist; no closed-loop driver |
+| Inverting the entropy to find the density | open — `thermo.density_from_entropy` and `temperature_from_entropy` invert a scale-free proxy, `Ytot (5/2 + ln(T^1.5/rho))`, which omits the nuclear masses, partition functions and physical constants of the Sackur-Tetrode entropy. Inverting a physical entropy with them is wrong by orders of magnitude (100x in density for helium-4 at 1e8 g/cm^3) |
+| Constant-entropy evolution with self-consistent entropy inverter | open — needs the physical entropy inverter above; no closed-loop driver |
+| Electron screening in non-degenerate matter with `SkyNetScreening` | partial — the electron and positron term of SkyNet's Debye sum needs an equation of state; pass `pair_term = Ye` for non-degenerate electrons, or use `weak_screening_factor`, which includes them |
 | Electron/positron chemical-potential terms in entropy generation (libstatmech) | open — weak reactions carry tabulated rates instead |
 | Fission *cycling* studies (automatic fragment distributions) | partial — `fission_reaction` builds channels; distributions are user input |
 | Downloading webnucleo XML files | use the URLs in the blog post; nucnetpy reads them directly |

@@ -22,16 +22,39 @@ def radiation_pressure(temperature: float) -> float:
 
 
 def entropy_ideal_ions(rho: float, temperature: float, ytot: float) -> float:
+    """Return ``Ytot * (5/2 + ln(T^1.5 / rho))``, a scale-free entropy proxy.
+
+    This is not the physical ion entropy.  The Sackur-Tetrode entropy per
+    nucleon is ``sum_i Y_i (5/2 + ln(Y_Q,i / Y_i))``, and the quantum abundance
+    ``Y_Q,i`` carries the nuclear mass, the partition function and physical
+    constants that are absent here.  The proxy therefore has the right
+    dependence on ``T`` and ``rho`` at fixed composition, so differences in it
+    are meaningful, but its absolute value is not: for pure helium-4 at
+    ``T = 5e9 K`` and ``rho = 1e8 g/cm^3`` it gives 4.39 against the true 3.24.
+    ``temperature`` is in kelvin.
+    """
     rho = max(float(rho), 1e-99); temperature = max(float(temperature), 1e-99)
-    # Dimensionless entropy per baryon proxy.
     return float(ytot) * (2.5 + math.log((temperature ** 1.5) / rho))
 
 
 def density_from_entropy(entropy: float, temperature: float, ytot: float) -> float:
+    """Invert :func:`entropy_ideal_ions` for the density.
+
+    Because the proxy omits the quantum abundance, a physical entropy does not
+    give a physical density: inverting the true entropy of pure helium-4 at
+    ``rho = 1e8 g/cm^3`` returns about ``1e10``.  Use it only with values from
+    :func:`entropy_ideal_ions` itself, for example to find the density change
+    that keeps the proxy constant as the temperature changes.
+    """
     return float((temperature ** 1.5) / math.exp(float(entropy) / max(ytot, 1e-99) - 2.5))
 
 
 def temperature_from_entropy(entropy: float, rho: float, ytot: float) -> float:
+    """Invert :func:`entropy_ideal_ions` for the temperature, in kelvin.
+
+    The same caveat as :func:`density_from_entropy` applies: only values from
+    :func:`entropy_ideal_ions` give meaningful results.
+    """
     return float((rho * math.exp(float(entropy) / max(ytot, 1e-99) - 2.5)) ** (2.0/3.0))
 
 
