@@ -13,7 +13,7 @@ partition functions, Coulomb corrections, and numerical tolerances.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 import math
 import numpy as np
 
@@ -23,7 +23,6 @@ from .species import Species, normalize_species_name
 
 # hbar*c in MeV cm
 _HBAR_C_MEV_CM = HBAR_C_MEV_FM * 1.0e-13
-_MU_BOUNDS = (-500.0, 500.0)
 
 
 def _partition(sp: Species, t9: float) -> float:
@@ -104,66 +103,19 @@ class NSEResult:
         return float(sum(Species.parse(k).z * v for k, v in self.abundances.items()))
 
 
-def _safe_exp(x: float) -> float:
-    if x > 700:
-        return math.exp(700)
-    if x < -745:
-        return 0.0
-    return math.exp(x)
+def _equilibrium_species(network: Network, species: Optional[Sequence[str]],
+                         require_nuclear_data: bool) -> List[Species]:
+    """Return the nuclides an equilibrium is solved over.
 
-
-def _moments(species: Sequence[Species], pref: np.ndarray, mu_p: float, mu_n: float) -> Tuple[float, float, Dict[str, float]]:
-    xsum = 0.0
-    ye = 0.0
-    abund: Dict[str, float] = {}
-    for sp, pr in zip(species, pref):
-        expo = sp.z * mu_p + sp.n * mu_n
-        y = float(pr) * _safe_exp(expo)
-        abund[sp.name] = y
-        xsum += sp.a * y
-        ye += sp.z * y
-    return float(xsum), float(ye), abund
-
-
-def _log_moments(log_pref: np.ndarray, z: np.ndarray, a: np.ndarray, mu_p: float, mu_n: float) -> Tuple[float, np.ndarray]:
-    """Return ``(log(sum A_i Y_i), weights)`` via a stable log-sum-exp.
-
-    ``weights[i] = A_i Y_i / sum_j A_j Y_j`` and sums to one, so charge moments
-    can be formed as ``sum (Z_i/A_i) weights_i`` without overflow even when the
-    prefactors span tens of orders of magnitude.
-    """
-    n = a - z
-    log_w = log_pref + np.log(a) + z * mu_p + n * mu_n
-    m = float(np.max(log_w))
-    log_sum_a = m + math.log(float(np.sum(np.exp(log_w - m))))
-    weights = np.exp(log_w - log_sum_a)
-    return log_sum_a, weights
-
-
-def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optional[Sequence[str]] = None, include_partition: bool = True, tol: float = 1e-8, max_iter: int = 200, nse_correction=None, require_nuclear_data: bool = True) -> NSEResult:
-    """Solve an NSE composition for a network.
-
-    The constraints are ``sum(A_i Y_i)=1`` and ``sum(Z_i Y_i)=Ye``.  The solve is
-    performed on the well-scaled residuals ``log(sum A_i Y_i)`` and
-    ``sum(Z_i Y_i)/sum(A_i Y_i) - Ye`` using a numerically stable log-sum-exp,
-    which keeps the iron-peak prefactors representable.  A Levenberg--Marquardt
-    least-squares solve is used when SciPy is available; otherwise an internal
-    damped LM iteration is used.  Several starting points are tried so the solve
-    is robust across temperature/density regimes.
-
-    ``nse_correction`` is an optional callable ``(species, t9, rho, ye) ->
-    f_corr`` added to each species' NSE exponent, the libnucnet NSE correction
-    factor hook.  Pass :func:`nucnetpy.coulomb.nse_correction` for the Bravo &
-    Garcia-Senz Coulomb correction.
+    Photons and leptons carry no baryon number and are left out.  Species
+    invented to satisfy a reaction record carry a placeholder mass excess of
+    zero; including them would let an unbound nuclide compete with the iron
+    peak, so they are dropped unless ``require_nuclear_data`` is false.
     """
     names = [normalize_species_name(s) for s in (species or network.species_names())]
     if require_nuclear_data:
-        # Species invented to satisfy a reaction record carry a placeholder mass
-        # excess of zero.  Including them would let an unbound nuclide compete
-        # with the iron peak, so they are dropped unless explicitly requested.
         placeholders = set(network.species_without_nuclear_data())
-        if placeholders:
-            names = [n for n in names if n not in placeholders]
+        names = [n for n in names if n not in placeholders]
     sps = []
     for name in names:
         sp = network.species.get(name)
@@ -174,6 +126,159 @@ def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optio
                 continue
         if sp.a > 0:
             sps.append(sp)
+    return sps
+
+
+def _log_sum_exp(values: np.ndarray) -> Tuple[float, np.ndarray]:
+    """Return ``log(sum(exp(values)))`` and the normalised weights, without overflow."""
+    top = float(np.max(values))
+    scaled = np.exp(values - top)
+    total = float(np.sum(scaled))
+    return top + math.log(total), scaled / total
+
+
+def _solve_equilibrium(log_pref: np.ndarray, z: np.ndarray, a: np.ndarray, ye: float,
+                       cluster: Optional[np.ndarray] = None,
+                       log_constraints: Sequence[float] = (),
+                       tol: float = 1e-8, max_iter: int = 200):
+    """Find the chemical potentials of an equilibrium, optionally constrained.
+
+    This is the solver behind both :func:`solve_nse` and
+    :func:`nucnetpy.qse.solve_qse`.  Species ``i`` has
+
+        ln Y_i = log_pref_i + B_i . x,     x = (mu_p, mu_n, lambda_1, ..., lambda_k),
+
+    where ``B_i = (Z_i, N_i, e_c)`` and ``e_c`` marks the cluster, if any, that
+    species ``i`` belongs to.  The residuals are all of order one:
+
+        ln(sum_i A_i Y_i)                      so that sum A Y = 1
+        ln(P) - ln(M)                          so that sum Z Y = Ye
+        ln(sum_{i in c} Y_i) - ln(Y_c)         one per cluster
+
+    Charge balance is written as ``P = M``, where ``P`` sums the charge excess
+    ``(Z_i - Ye A_i) Y_i`` of the species with ``Z_i > Ye A_i`` and ``M`` the
+    deficit of those with ``Z_i < Ye A_i``.  Species with ``Z_i = Ye A_i``
+    cannot affect the balance and drop out exactly.  This matters at
+    ``Ye = 0.5``: the bulk is then in N = Z nuclei, and the balance is decided
+    by trace free nucleons whose effect on ``sum Z Y - Ye`` is far below
+    floating-point resolution, so that form leaves their abundances
+    undetermined.  The logarithmic form stays of order one however small they
+    are.  When only one side exists, ``Ye`` cannot be met exactly and the
+    linear form ``sum Z Y / sum A Y - Ye`` is used instead.
+
+    The Jacobian is computed exactly.  A Levenberg-Marquardt solve from several
+    starting points is followed by Gauss-Newton polishing, so the result is
+    converged to machine precision rather than to wherever the optimiser's
+    step-size test happened to stop.
+
+    The potentials need not be unique.  If every species has the same ratio
+    N/Z -- an alpha chain without free nucleons, for example -- only the
+    combination ``Z mu_p + N mu_n`` is fixed by the constraints.  Any split
+    gives the same abundances, and which split an optimiser lands on depends
+    on its version.  The minimum-norm solution is therefore returned whenever
+    ``B`` is rank-deficient, which makes the reported potentials reproducible.
+
+    Returns ``(x, ln_y, residual_norm, message)``.
+    """
+    from scipy.optimize import least_squares
+
+    k = len(log_constraints)
+    cluster = np.full(len(z), -1, dtype=int) if cluster is None else np.asarray(cluster)
+    basis = np.zeros((len(z), 2 + k), dtype=float)
+    basis[:, 0] = z
+    basis[:, 1] = a - z
+    members = [cluster == c for c in range(k)]
+    for c, mask in enumerate(members):
+        basis[mask, 2 + c] = 1.0
+    log_a = np.log(a)
+    charge_per_nucleon = z / a
+    log_constraints = np.asarray(log_constraints, dtype=float)
+    excess = z - ye * a
+    excess[np.abs(excess) < 1e-12 * a] = 0.0     # round-off from a Ye such as 0.45
+    surplus, deficit = excess > 0.0, excess < 0.0
+    two_sided = bool(surplus.any() and deficit.any())
+    if two_sided:
+        log_surplus, log_deficit = np.log(excess[surplus]), np.log(-excess[deficit])
+
+    def residual_and_jacobian(x):
+        log_y = log_pref + basis @ x
+        log_mass, w = _log_sum_exp(log_y + log_a)        # w_i = A_i Y_i / sum_j A_j Y_j
+        mean_b = w @ basis
+        if two_sided:
+            log_p, p_weights = _log_sum_exp(log_y[surplus] + log_surplus)
+            log_m, m_weights = _log_sum_exp(log_y[deficit] + log_deficit)
+            charge_residual = log_p - log_m
+            charge_row = p_weights @ basis[surplus] - m_weights @ basis[deficit]
+        else:
+            charge = float(charge_per_nucleon @ w)
+            charge_residual = charge - ye
+            charge_row = (charge_per_nucleon * w) @ basis - charge * mean_b
+        residuals = [log_mass, charge_residual]
+        rows = [mean_b, charge_row]
+        for c, mask in enumerate(members):
+            log_cluster, u = _log_sum_exp(log_y[mask])
+            residuals.append(log_cluster - log_constraints[c])
+            rows.append(u @ basis[mask])
+        return np.array(residuals), np.array(rows)
+
+    best = None
+    for guess in (0.0, -1.0, -5.0, -10.0, -20.0):
+        x0 = np.concatenate([[guess, guess], np.zeros(k)])
+        sol = least_squares(lambda x: residual_and_jacobian(x)[0], x0,
+                            jac=lambda x: residual_and_jacobian(x)[1],
+                            method="lm", xtol=1e-14, ftol=1e-14, max_nfev=max_iter * 10)
+        x, norm = _gauss_newton_polish(residual_and_jacobian, np.asarray(sol.x, dtype=float))
+        if best is None or norm < best[1]:
+            best = (x, norm, str(sol.message))
+        if norm < tol:
+            break
+    x, norm, message = best
+
+    if np.linalg.matrix_rank(basis) < basis.shape[1]:
+        x = np.linalg.pinv(basis) @ (basis @ x)
+        message += ("; the potentials are not unique for this species set, so the "
+                    "minimum-norm values are reported")
+    return x, log_pref + basis @ x, norm, message
+
+
+def _gauss_newton_polish(residual_and_jacobian, x: np.ndarray, iterations: int = 20):
+    """Refine a solution with Gauss-Newton steps while the residual keeps falling.
+
+    Each step solves ``J dx = -r`` in the least-squares sense, which also copes
+    with a rank-deficient Jacobian.  Returns ``(x, residual_norm)``.
+    """
+    r, j = residual_and_jacobian(x)
+    norm = float(np.linalg.norm(r))
+    for _ in range(iterations):
+        step = np.linalg.lstsq(j, -r, rcond=None)[0]
+        r_new, j_new = residual_and_jacobian(x + step)
+        norm_new = float(np.linalg.norm(r_new))
+        if not norm_new < norm:
+            break
+        x, r, j, norm = x + step, r_new, j_new, norm_new
+    return x, norm
+
+
+def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optional[Sequence[str]] = None, include_partition: bool = True, tol: float = 1e-8, max_iter: int = 200, nse_correction=None, require_nuclear_data: bool = True) -> NSEResult:
+    """Solve an NSE composition for a network.
+
+    The constraints are ``sum(A_i Y_i) = 1`` and ``sum(Z_i Y_i) = Ye``.  The
+    solve works on well-scaled residuals with a numerically stable log-sum-exp,
+    which keeps the iron-peak prefactors representable; see
+    :func:`_solve_equilibrium` for the method.  ``success`` is true only when
+    the residual norm is below ``tol``.
+
+    When every species in the solve has the same ratio N/Z, only the
+    combination ``Z mu_p + N mu_n`` is determined.  The abundances are still
+    unique, and the reported ``mu_p`` and ``mu_n`` are the minimum-norm pair, so
+    they do not depend on the SciPy version.
+
+    ``nse_correction`` is an optional callable ``(species, t9, rho, ye) ->
+    f_corr`` added to each species' NSE exponent, the libnucnet NSE correction
+    factor hook.  Pass :func:`nucnetpy.coulomb.nse_correction` for the Bravo &
+    Garcia-Senz Coulomb correction.
+    """
+    sps = _equilibrium_species(network, species, require_nuclear_data)
     if not sps:
         raise ValueError("No valid species available for NSE solve")
     log_pref = np.array([_log_prefactor(sp, t9, rho, include_partition=include_partition) for sp in sps], dtype=float)
@@ -183,71 +288,9 @@ def solve_nse(network: Network, t9: float, rho: float, ye: float, species: Optio
     a = np.array([sp.a for sp in sps], dtype=float)
     ye = float(ye)
 
-    def residual(mus):
-        log_sum_a, weights = _log_moments(log_pref, z, a, float(mus[0]), float(mus[1]))
-        charge = float(np.sum((z / a) * weights))
-        return np.array([log_sum_a, charge - ye], dtype=float)
-
-    guesses = [(0.0, 0.0), (-1.0, -1.0), (-5.0, -5.0), (-10.0, -10.0), (-20.0, -20.0)]
-    best_mu = np.array(guesses[0], dtype=float)
-    best_norm = float("inf")
-    message = ""
-    for guess in guesses:
-        mu, norm, msg = _solve_mu(residual, np.array(guess, dtype=float), tol, max_iter)
-        if norm < best_norm:
-            best_mu, best_norm, message = mu, norm, msg
-        if best_norm < tol:
-            break
-
-    mu_p, mu_n = float(best_mu[0]), float(best_mu[1])
-    abund = {sp.name: float(np.exp(min(lp + sp.z * mu_p + sp.n * mu_n, 700.0)))
-             for sp, lp in zip(sps, log_pref)}
-    success = best_norm < max(tol, 1e-6)
-    return NSEResult(t9, rho, ye, mu_p, mu_n, abund, success, message)
-
-
-def _solve_mu(residual, guess: np.ndarray, tol: float, max_iter: int) -> Tuple[np.ndarray, float, str]:
-    """Solve ``residual(mu)=0`` returning ``(mu, residual_norm, message)``."""
-    try:
-        from scipy.optimize import least_squares
-        sol = least_squares(residual, guess, method="lm", xtol=1e-14, ftol=1e-14, max_nfev=max_iter * 10)
-        return np.asarray(sol.x, dtype=float), float(np.linalg.norm(sol.fun)), str(sol.message)
-    except Exception as exc:
-        return _levenberg_marquardt(residual, guess, tol, max_iter) + (f"internal LM ({exc})",)
-
-
-def _levenberg_marquardt(residual, mu: np.ndarray, tol: float, max_iter: int) -> Tuple[np.ndarray, float]:
-    mu = np.clip(mu.astype(float), *_MU_BOUNDS)
-    lam = 1e-3
-    r = residual(mu)
-    norm = float(np.linalg.norm(r))
-    eps = 1e-6
-    for _ in range(max_iter):
-        if norm < tol:
-            break
-        j = np.column_stack([(residual(mu + [eps, 0]) - r) / eps, (residual(mu + [0, eps]) - r) / eps])
-        jtj = j.T @ j
-        grad = j.T @ r
-        improved = False
-        for _ in range(30):
-            try:
-                step = np.linalg.solve(jtj + lam * np.eye(2), -grad)
-            except np.linalg.LinAlgError:
-                lam *= 10.0
-                continue
-            trial = np.clip(mu + step, *_MU_BOUNDS)
-            trial_norm = float(np.linalg.norm(residual(trial)))
-            if trial_norm < norm:
-                mu, r, norm = trial, residual(trial), trial_norm
-                lam = max(lam / 3.0, 1e-12)
-                improved = True
-                break
-            lam *= 3.0
-            if lam > 1e12:
-                break
-        if not improved:
-            break
-    return mu, norm
+    x, log_y, norm, message = _solve_equilibrium(log_pref, z, a, ye, tol=tol, max_iter=max_iter)
+    abund = {sp.name: float(math.exp(min(v, 700.0))) for sp, v in zip(sps, log_y)}
+    return NSEResult(t9, rho, ye, float(x[0]), float(x[1]), abund, norm < tol, message)
 
 
 def equilibrium_ratio(reaction, network: Network, t9: float, rho: float, ye: float) -> float:

@@ -67,24 +67,20 @@ class QSEResult:
         return float(sum(Species.parse(k).z * v for k, v in self.abundances.items()))
 
 
-def solve_qse(network: Network, t9: float, rho: float, ye: float, clusters: Sequence[QSECluster], species: Optional[Sequence[str]] = None, include_partition: bool = True, nse_correction=None, tol: float = 1e-8, max_iter: int = 300) -> QSEResult:
+def solve_qse(network: Network, t9: float, rho: float, ye: float, clusters: Sequence[QSECluster], species: Optional[Sequence[str]] = None, include_partition: bool = True, nse_correction=None, tol: float = 1e-8, max_iter: int = 300, require_nuclear_data: bool = True) -> QSEResult:
     """Solve a constrained (QSE) equilibrium for a network.
 
     ``clusters`` is a sequence of :class:`QSECluster`; species not in any
     cluster follow unconstrained NSE.  A species may belong to at most one
-    cluster.  With ``clusters=[]`` the result equals :func:`~nucnetpy.nse.solve_nse`.
+    cluster.  With ``clusters=[]`` the result equals :func:`~nucnetpy.nse.solve_nse`,
+    and the same solver is used, so ``success`` means the residual norm is
+    below ``tol`` and non-unique potentials are reported as the minimum-norm
+    solution.  Species without nuclear data are left out, as in
+    :func:`~nucnetpy.nse.solve_nse`, unless ``require_nuclear_data`` is false.
     """
-    names = [normalize_species_name(s) for s in (species or network.species_names())]
-    sps = []
-    for name in names:
-        sp = network.species.get(name)
-        if sp is None:
-            try:
-                sp = Species.parse(name)
-            except Exception:
-                continue
-        if sp.a > 0:
-            sps.append(sp)
+    from .nse import _equilibrium_species, _solve_equilibrium
+
+    sps = _equilibrium_species(network, species, require_nuclear_data)
     if not sps:
         raise ValueError("No valid species available for QSE solve")
 
@@ -101,59 +97,23 @@ def solve_qse(network: Network, t9: float, rho: float, ye: float, clusters: Sequ
             if member[k] >= 0:
                 raise ValueError(f"species {sps[k].name} assigned to two clusters")
             member[k] = c
+        if not np.any(member == c):
+            raise ValueError(f"cluster {c} contains none of the species being solved for")
 
     log_pref = np.array([_log_prefactor(sp, t9, rho, include_partition=include_partition) for sp in sps], dtype=float)
     if nse_correction is not None:
         log_pref = log_pref + np.array([float(nse_correction(sp, t9, rho, float(ye))) for sp in sps], dtype=float)
     z = np.array([sp.z for sp in sps], dtype=float)
     a = np.array([sp.a for sp in sps], dtype=float)
-    n = a - z
     ye = float(ye)
-    log_constraints = np.array([math.log(float(cl.constraint)) for cl in clusters], dtype=float)
+    log_constraints = [math.log(float(cl.constraint)) for cl in clusters]
 
-    def log_weights(params: np.ndarray) -> np.ndarray:
-        mu_p, mu_n = params[0], params[1]
-        lw = log_pref + z * mu_p + n * mu_n
-        for c in range(n_c):
-            lw = lw + np.where(member == c, params[2 + c], 0.0)
-        return lw
-
-    def residual(params: np.ndarray) -> np.ndarray:
-        lw = log_weights(params)
-        lwa = lw + np.log(a)
-        m = float(np.max(lwa))
-        log_sum_a = m + math.log(float(np.sum(np.exp(lwa - m))))
-        w = np.exp(lwa - log_sum_a)               # A_i Y_i / sum, sums to 1
-        charge = float(np.sum((z / a) * w))
-        res = [log_sum_a, charge - ye]
-        for c in range(n_c):
-            mask = member == c
-            mc = float(np.max(lw[mask]))
-            log_sum_c = mc + math.log(float(np.sum(np.exp(lw[mask] - mc))))
-            res.append(log_sum_c - log_constraints[c])
-        return np.array(res, dtype=float)
-
-    best_x = None
-    best_norm = float("inf")
-    message = ""
-    for g in [0.0, -1.0, -5.0, -10.0, -20.0]:
-        x0 = np.concatenate([[g, g], np.zeros(n_c)])
-        try:
-            from scipy.optimize import least_squares
-            sol = least_squares(residual, x0, method="lm", xtol=1e-14, ftol=1e-14, max_nfev=max_iter * 10)
-            x_val, norm, msg = np.asarray(sol.x, float), float(np.linalg.norm(sol.fun)), str(sol.message)
-        except Exception as exc:
-            x_val, norm, msg = x0, float(np.linalg.norm(residual(x0))), f"scipy unavailable ({exc})"
-        if norm < best_norm:
-            best_x, best_norm, message = x_val, norm, msg
-        if best_norm < tol:
-            break
-
-    lw = log_weights(best_x)
-    abund = {sp.name: float(math.exp(min(float(v), 700.0))) for sp, v in zip(sps, lw)}
-    return QSEResult(t9, rho, ye, float(best_x[0]), float(best_x[1]),
-                     [float(v) for v in best_x[2:]], abund,
-                     best_norm < max(tol, 1e-6), message)
+    x, log_y, norm, message = _solve_equilibrium(log_pref, z, a, ye, cluster=member,
+                                                 log_constraints=log_constraints,
+                                                 tol=tol, max_iter=max_iter)
+    abund = {sp.name: float(math.exp(min(float(v), 700.0))) for sp, v in zip(sps, log_y)}
+    return QSEResult(t9, rho, ye, float(x[0]), float(x[1]), [float(v) for v in x[2:]],
+                     abund, norm < tol, message)
 
 
 def cluster_abundance(abundances: Mapping[str, float], cluster_species: Sequence[str]) -> float:
