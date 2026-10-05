@@ -7,7 +7,7 @@ include CITATION.cff
 include README.md
 include pyproject.toml
 
-recursive-include tests *.py *.json *.xml *.txt *.csv
+recursive-include tests *.py *.json *.xml *.txt
 recursive-include validation *.py
 # The reference case: the extracted network, its expected output and the
 # provenance of the database it came from.  This is the sample input and output

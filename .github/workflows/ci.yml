@@ -11,17 +11,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.11", "3.13"]
+        # Every version the package claims to support.  Each one resolves a
+        # different SciPy release, and solver behaviour has differed between
+        # SciPy releases before.
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        shell: bash          # with -eo pipefail, so a failure inside a pipe fails the step
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
         run: python -m pip install -e ".[dev]"
       - name: Test
         run: python -m pytest
-      - name: CLI smoke test
+      - name: Command-line smoke test
         run: |
           nucnetpy summary notebooks/data/toy_alpha_network.xml
-          nucnetpy nse tests/golden/golden_network.xml --t9 5 --rho 1e8 --ye 0.5 | head -1
+          nucnetpy nse tests/golden/golden_network.xml --t9 5 --rho 1e8 --ye 0.5 > /dev/null
+          python examples/use_nucnetpy.py > /dev/null
+      - name: Command-line reference is up to date
+        run: |
+          python docs/manual/generate_cli_reference.py
+          git diff --exit-code docs/manual/reference/cli.md

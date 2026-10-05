@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -13,7 +13,8 @@ authors = [
     {name = "Nidal M. Ershaidat", email = "N.Ershaidat@ju.edu.jo"},
 ]
 maintainers = [{name = "Mohammed H. Talafha", email = "mtalafha901@gmail.com"}]
-license = {text = "GPL-3.0-or-later"}
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 keywords = [
     "nucleosynthesis", "nuclear-astrophysics", "reaction-network",
     "nucnet-tools", "libnucnet", "NSE", "r-process", "s-process",
@@ -21,7 +22,6 @@ keywords = [
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.9",
@@ -55,9 +55,6 @@ docs = ["sphinx>=7", "furo", "myst-parser", "rinohtype"]
 
 [project.scripts]
 nucnetpy = "nucnetpy.cli:main"
-
-[tool.setuptools]
-license-files = ["LICENSE"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
