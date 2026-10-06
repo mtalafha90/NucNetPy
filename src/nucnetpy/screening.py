@@ -153,16 +153,19 @@ class SkyNetScreening:
     ``mu_i = -0.380 lambda_0^b eta_b Z^(b+1)`` with ``b = 0.860``; and strong
     screening from a one-component-plasma fit.
 
-    ``zeta`` here contains only the ions, ``zeta^2 = sum Z^2 Y / sum Y``.  In
-    SkyNet the Debye sum also runs over the electrons and positrons, with a
-    weight set by their degeneracy from an equation of state.  That term is
-    supplied through ``pair_term``, which is added to ``sum Z^2 Y``; the
-    default of zero is the limit of strongly degenerate electrons, which do
-    not screen.  For non-degenerate electrons, as in hydrogen and helium
-    burning in ordinary stars, pass ``pair_term = Ye``: this recovers
-    Salpeter's ``zeta^2 = sum (Z^2 + Z) Y`` exactly.  Leaving it at zero there
-    underestimates the weak-screening exponent by a factor
-    ``sqrt(1 + Ye / sum Z^2 Y)``, about 22 per cent for pure helium-4.
+    ``zeta`` is the Debye sum per particle, ``zeta^2 = (sum Z^2 Y + E) / sum Y``,
+    where ``E`` is the electrons' and positrons' share.  As in SkyNet, ``E``
+    comes from the electron gas: by default (``pair_term=None``) it is
+    computed at every update by :mod:`nucnetpy.electrons` as
+    ``kT (dn/dmu) / (rho N_A)``.  That is ``Ye`` for non-degenerate electrons,
+    which recovers Salpeter's ``zeta^2 = sum (Z^2 + Z) Y``; it falls towards
+    zero as the electrons become degenerate and no longer screen, and it
+    rises above ``Ye`` when positron pairs add to the screening.  A number
+    passed as ``pair_term`` is used instead, so ``pair_term=0.0`` gives the
+    ions-only (fully degenerate) limit.
+
+    The electron state is cached and only recomputed when the temperature,
+    density or ``Ye`` change (``Ye`` is compared to 10 decimal places).
 
     The object is a callable suitable for the ``screening`` argument of
     :func:`nucnetpy.evolve_zone`.  It caches ``mu(Z)`` and recomputes it in
@@ -171,11 +174,31 @@ class SkyNetScreening:
     """
 
     def __init__(self, species_map: Optional[Mapping[str, Species]] = None,
-                 max_z: int = 110, pair_term: float = 0.0):
+                 max_z: int = 110, pair_term: Optional[float] = None):
         self.species_map = species_map
         self.max_z = int(max_z)
-        self.pair_term = float(pair_term)
+        self.pair_term = None if pair_term is None else float(pair_term)
         self._mu = [0.0] * (self.max_z + 1)
+        self._electron_key = None
+        self._electron_term = 0.0
+
+    def electron_term(self, t9: float, rho: float, ye: float) -> float:
+        """Return ``E``, the electrons' and positrons' share of the Debye sum.
+
+        This is ``pair_term`` if one was given, and otherwise
+        :attr:`nucnetpy.electrons.ElectronGas.screening_term` at
+        ``(t9, rho, ye)``.
+        """
+        if self.pair_term is not None:
+            return self.pair_term
+        if t9 <= 0.0 or rho <= 0.0 or ye <= 0.0:
+            return 0.0
+        key = (float(t9), float(rho), round(float(ye), 10))
+        if key != self._electron_key:
+            from .electrons import electron_gas
+            self._electron_term = electron_gas(t9, rho, ye).screening_term
+            self._electron_key = key
+        return self._electron_term
 
     def _species(self, name: str) -> Optional[Species]:
         sp = self.species_map.get(normalize_species_name(name)) if self.species_map else None
@@ -211,7 +234,8 @@ class SkyNetScreening:
         nb = max(float(rho), 1e-300) * AVOGADRO
         t_mev = max(float(t9), 1e-30) * _KB_MEV_PER_GK
         lambda0 = _LAMBDA0_FACTOR * math.sqrt(nb * sum_y) / (t_mev ** 1.5)
-        zeta = math.sqrt(max(sum_z2y + self.pair_term, 0.0) / sum_y)
+        electrons = self.electron_term(float(t9), float(rho), sum_zy if ye is None else float(ye))
+        zeta = math.sqrt(max(sum_z2y + electrons, 0.0) / sum_y)
         if zeta <= 0.0 or zbar <= 0.0:
             self._mu = [0.0] * (self.max_z + 1)
             return

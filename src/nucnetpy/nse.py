@@ -53,6 +53,20 @@ def _log_prefactor(sp: Species, t9: float, rho: float, include_partition: bool =
     orders of magnitude) representable and lets the solver use a numerically
     stable log-sum-exp for the abundance moments.
     """
+    kt = KB_MEV * max(float(t9), 1e-30) * 1.0e9  # kT in MeV
+    # More tightly bound nuclei have lower mass excess and are enhanced.  The
+    # Z*ME(p)+N*ME(n) piece of the binding energy is linear in Z and N and is
+    # absorbed by the proton/neutron chemical potentials, so only -ME_i remains.
+    return _log_quantum_abundance(sp, t9, rho, include_partition) - float(sp.mass_excess) / kt
+
+
+def _log_quantum_abundance(sp: Species, t9: float, rho: float, include_partition: bool = True) -> float:
+    """Natural log of ``Y_Q = (2J+1) G(T) n_Q / (rho N_A)``.
+
+    ``n_Q = (A m_u kT / 2 pi hbar^2)^(3/2)`` is the quantum concentration.  This
+    is the NSE prefactor without the binding-energy term, and it is also the
+    quantity in the Sackur-Tetrode entropy (:func:`nucnetpy.thermo.entropy_per_nucleon`).
+    """
     t9 = max(float(t9), 1e-30)
     rho = max(float(rho), 1e-300)
     kt = KB_MEV * t9 * 1.0e9  # kT in MeV
@@ -72,12 +86,7 @@ def _log_prefactor(sp: Species, t9: float, rho: float, include_partition: bool =
     # nucleon mass enters as its rest energy m_u c^2 = AMU_MEV, not its mass in
     # grams.  The species mass is folded in through the a**1.5 term.
     log_theta = 1.5 * math.log((AMU_MEV * kt) / (2.0 * math.pi * (_HBAR_C_MEV_CM ** 2)))
-    log_pref = math.log(max(g, 1e-300)) + 1.5 * math.log(a) + log_theta - math.log(rho * AVOGADRO)
-    # More tightly bound nuclei have lower mass excess and are enhanced.  The
-    # Z*ME(p)+N*ME(n) piece of the binding energy is linear in Z and N and is
-    # absorbed by the proton/neutron chemical potentials, so only -ME_i remains.
-    log_pref += -float(sp.mass_excess) / kt
-    return float(log_pref)
+    return math.log(max(g, 1e-300)) + 1.5 * math.log(a) + log_theta - math.log(rho * AVOGADRO)
 
 
 @dataclass

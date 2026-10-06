@@ -302,7 +302,7 @@ def test_skynet_screening_recovers_the_weak_limit():
 
     species = {"he4": Species("he4", 2, 4), "c12": Species("c12", 6, 12),
                "o16": Species("o16", 8, 16)}
-    screening = SkyNetScreening(species)
+    screening = SkyNetScreening(species, pair_term=0.0)
     composition = {"he4": 0.25}
 
     screening.update(composition, t9=1.0, rho=1.0)
@@ -317,7 +317,7 @@ def test_skynet_screening_recovers_the_weak_limit():
     # Salpeter pairwise formula where weak screening applies.  Compare the
     # exponents, not the factors: at these densities both factors are within
     # 1 per cent of one, so a factor comparison cannot tell the full Salpeter
-    # zeta from the ion-only one.  The default SkyNet zeta holds the ions only
+    # zeta from the ion-only one.  pair_term = 0 holds the ions only
     # (degenerate electrons); pair_term = Ye adds non-degenerate electrons.
     import math
     reaction = Reaction.from_names(["c12", "he4"], ["o16"])
