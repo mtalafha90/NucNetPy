@@ -104,7 +104,13 @@ Pages are generated from the docstrings in the source.
    :members: Trajectory, read_trajectory, exponential_expansion
 
 .. automodule:: nucnetpy.thermo
-   :members:
+   :members: entropy_per_nucleon, EntropyPerNucleon, ion_entropy_per_nucleon,
+             photon_entropy_per_nucleon, density_for_entropy, t9_for_entropy,
+             constant_entropy_thermo, entropy_ideal_ions, density_from_entropy,
+             temperature_from_entropy
+
+.. automodule:: nucnetpy.electrons
+   :members: electron_gas, ElectronGas, electron_chemical_potential
 
 .. automodule:: nucnetpy.validation
    :members: validate_network, validate_zone, regression_summary,

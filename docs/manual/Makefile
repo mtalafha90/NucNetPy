@@ -11,18 +11,25 @@ SPHINXBUILD ?= sphinx-build
 SOURCEDIR    = .
 BUILDDIR     = _build
 
-.PHONY: help html singlehtml pdf clean all
+PYTHON      ?= python
+
+.PHONY: help cli html singlehtml pdf clean all
 
 help:
-	@echo "targets: html  singlehtml  pdf  all  clean"
+	@echo "targets: cli  html  singlehtml  pdf  all  clean"
 
-html:
+# The command-line reference is the parser's own help text; rebuild it first
+# so the manual cannot drift from the code.
+cli:
+	$(PYTHON) generate_cli_reference.py
+
+html: cli
 	$(SPHINXBUILD) -b html $(SOURCEDIR) $(BUILDDIR)/html
 
-singlehtml:
+singlehtml: cli
 	$(SPHINXBUILD) -b singlehtml $(SOURCEDIR) $(BUILDDIR)/singlehtml
 
-pdf:
+pdf: cli
 	$(SPHINXBUILD) -b rinoh $(SOURCEDIR) $(BUILDDIR)/pdf
 
 all: html singlehtml pdf

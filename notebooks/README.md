@@ -32,7 +32,7 @@ cells skip cleanly when the files are absent, so it can still be read and run.
 | `06_validation_and_regression_workflow` | Conservation along a trajectory, golden files, and what they do *not* prove |
 | `07_using_jina_xml_database` | Reading JINA files, validating them, cutting a network down to size |
 | `08_validate_real_jina_files` | Working with a full production database (bring your own) |
-| `09_thermodynamic_consistency` | Detailed balance against library reverse rates; energy release |
+| `09_thermodynamic_consistency` | Detailed balance against library reverse rates; energy release; entropy and a constant-entropy expansion |
 
 ## Using notebook 08 with your own data
 
@@ -52,13 +52,12 @@ conservation, species lacking nuclear data, and sample rates.
 Both have their own section in the notebooks, but they are worth stating here
 because neither announces itself with an error message.
 
-**Keep `gamma` when you cut a network.** `limit_network` retains only reactions
-whose participants all survive the cut, and `select_species` returns nuclides.
-Drop the photon and every photodisintegration goes with it — silently, and with
-it the network's ability to reach equilibrium:
+**Cutting a network keeps its photodisintegrations.** `limit_network` keeps
+every reaction whose nuclides all survive the cut; photons and leptons never
+decide the outcome, so listing `"gamma"` is harmless but no longer needed:
 
 ```python
-limit_network(net, select_species(net, zmax=20, amax=44) + ["gamma"])
+limit_network(net, select_species(net, zmax=20, amax=44))
 ```
 
 **A network relaxes to the equilibrium of the rates it is given**, which is not

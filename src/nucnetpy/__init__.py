@@ -31,3 +31,7 @@ from .coulomb import (nse_correction as coulomb_nse_correction, gamma_e,
                       species_coulomb_chemical_potential, species_coulomb_energy,
                       species_coulomb_entropy, coulomb_entropy_per_nucleon)
 from .qse import solve_qse, QSECluster, QSEResult, cluster_abundance, cluster_ydot
+from .electrons import ElectronGas, electron_gas, electron_chemical_potential
+from .thermo import (EntropyPerNucleon, entropy_per_nucleon, density_for_entropy,
+                     t9_for_entropy, constant_entropy_thermo)
+from . import electrons, thermo

@@ -36,8 +36,7 @@ are omitted.
 | Plotting isotopic abundances versus time | `species_history`, `EvolutionResult.mass_fraction_history` |
 | **Computing separation energies** | **`separation_energy` (proton branch fixed)** |
 | **Computing/understanding the entropy generation rate (incl. weak decay)** | **`entropy_generation_rate` (new), CLI `entropy-generation`** |
-| Inverting the entropy to find the density | `thermo.density_from_entropy`, `temperature_from_entropy` |
-| Computing thermodynamic quantities | `thermo` |
+| Computing thermodynamic quantities | `thermo`, `electrons` (electron-positron gas: chemical potential, pressure, energy, entropy) |
 | Defining your own thermodynamic (trajectory) function | `ThermoFunction` callables, `hydro.Trajectory` |
 | Using a thermodynamic trajectory file | `read_trajectory` |
 | Running a network calculation with simple hydrodynamics | `exponential_expansion` |
@@ -74,7 +73,9 @@ named C++ files:
 
 | Blog workflow | Status |
 |---|---|
-| Constant-entropy evolution with self-consistent entropy inverter | partial — `thermo` inverters exist; no closed-loop driver |
+| Inverting the entropy to find the density | `entropy_per_nucleon` (ions with masses, spins and partition functions; electrons and positrons from `nucnetpy.electrons`; photons; optional Coulomb term), `density_for_entropy`, `t9_for_entropy`. The old proxies `density_from_entropy` and `temperature_from_entropy` are deprecated |
+| Constant-entropy evolution with self-consistent entropy inverter | `constant_entropy_thermo(entropy, density, network)` — a `thermo` callable that sets T9 from the current composition at each step; the reactions' heat is not fed back |
+| Electron screening in non-degenerate matter with `SkyNetScreening` | the electron and positron term of the Debye sum is computed from the electron gas (`ElectronGas.screening_term`); `pair_term` overrides it |
 | Electron/positron chemical-potential terms in entropy generation (libstatmech) | open — weak reactions carry tabulated rates instead |
 | Fission *cycling* studies (automatic fragment distributions) | partial — `fission_reaction` builds channels; distributions are user input |
 | Downloading webnucleo XML files | use the URLs in the blog post; nucnetpy reads them directly |

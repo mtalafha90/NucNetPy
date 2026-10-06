@@ -1,87 +1,50 @@
 # Exact numerical identity policy
 
-A pure Python rewrite cannot honestly promise exact numerical identity with the
-original C++ NucNet Tools by itself.  Identity depends on the original C/C++
-source, libnucnet/libnuceq/statmech versions, GSL/libxml2 behaviour, compiler,
-optimization flags, reaction ordering, matrix solver details, and floating-point
-rounding.
+NucNetPy is pure Python. It contains no C++ code, does not call the original
+NucNet Tools programs, and has no "exact backend". It therefore cannot promise
+bit-for-bit agreement with a particular C++ build on its own.
 
-Therefore this package uses two backends:
+## Why identity cannot simply be assumed
 
-1. **Exact backend**: calls the original C++ NucNet Tools executables or compiled
-   wrappers.  This is the backend to use when you need exact legacy identity.
-2. **Python backend**: a Python implementation/scaffold for analysis, testing,
-   and future line-by-line porting.  This is useful, but it is not the source of
-   truth for exact identity until validated against golden C++ outputs.
+Two codes that implement the same equations can still disagree in the last
+digits, or by more, because results depend on:
 
-## Build the original backend
+- the nuclear data: mass excesses, partition-function tables and their
+  interpolation, and the rate fits;
+- modelling choices: the screening prescription, how reverse rates are
+  formed, and which species enter an equilibrium solve;
+- numerical choices: the integrator, its tolerances and time grid, the order
+  in which reactions are summed, and the linear-algebra library;
+- the platform: compiler, optimisation flags and floating-point rounding.
 
-The original C++ source tree is bundled under:
+Agreement has to be shown by comparison, not asserted.
 
-```text
-external/original_cpp
-```
+## How to compare with a C++ build you run yourself
 
-On your machine, install the original dependencies, usually including:
+The repository carries the machinery for this; the port status notes
+(`docs/PURE_PYTHON_PORT_STATUS.md`) describe it in detail.
 
-```bash
-sudo apt install build-essential g++ make gsl-bin libgsl-dev libxml2-dev xsltproc wget
-```
+1. Run the original NucNet Tools on the inputs in `tests/golden/` (or replace
+   those inputs with your own network and run both codes on them).
+2. Write the C++ outputs into the `data` blocks of the JSON files in
+   `tests/golden/`, and set each file's `source` to a label for your build.
+3. Set each file's `rtol` and `atol` to the agreement you need. The tests read
+   the tolerances from the files, so no test code has to change.
+4. Run `pytest tests/test_golden_identity.py`. A failure names the quantity,
+   the value from each code and the tolerance.
 
-Then try:
-
-```bash
-nucnetpy-exact source
-nucnetpy-exact make --jobs 4
-```
-
-The legacy Makefiles may download specific vendor packages such as libnucnet,
-libnuceq, wn_matrix, and statmech.  For strict reproducibility, keep the same
-versions and compile flags as your original C++ installation.
-
-## Run an original executable through Python
-
-Example:
-
-```bash
-nucnetpy-exact run print_output my_output.xml
-```
-
-or in Python:
-
-```python
-from nucnetpy.exact import CppBackend
-
-cpp = CppBackend(bin_dir="/path/to/original/build/bin")
-result = cpp.run("print_output", ["my_output.xml"])
-print(result.stdout)
-```
-
-## Compare outputs
-
-Byte-for-byte text comparison:
-
-```bash
-nucnetpy-exact compare cpp_output.txt python_output.txt
-```
-
-Floating-value comparison:
-
-```bash
-nucnetpy-exact compare cpp_output.txt python_output.txt --float --rtol 1e-14 --atol 0
-```
-
-For exact identity, use `--rtol 0 --atol 0`.  In practice, different compilers or
-CPUs may produce last-bit differences even for the same C++ code.
+Out of the box those files hold snapshots of NucNetPy's own output, so the
+same tests also catch any unintended change to the Python numerics.
+`validation/generate_golden.py` regenerates the snapshots after an intended
+change.
 
 ## Development rule
 
-For every C++ example converted to Python, create a golden-output test:
+When a C++ example is converted to Python, add a golden-output test for it:
 
-1. Run the original C++ executable on the same input XML.
-2. Save stdout as the golden file.
-3. Run the Python equivalent.
-4. Compare with zero tolerance first; if platform differences appear, record the
-   exact tolerance and reason.
+1. Run the original C++ program on a fixed input file and save its output.
+2. Run the Python equivalent on the same input.
+3. Compare with zero tolerance first. If the platforms differ in the last
+   bits, record the tolerance you need and why.
 
-Only modules passing these golden tests should be advertised as exact replacements.
+Only modules that pass such tests should be described as exact replacements.

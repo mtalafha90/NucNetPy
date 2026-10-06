@@ -9,7 +9,7 @@ The C++ source contains helper files under `nnt/` and `user/`. NucNetPy provides
 | network/reaction utilities | `reactions.py`, `validation.py` | Ported main rate/flow/conservation APIs |
 | `screen.*` | `screening.py` | Pure-Python weak and intermediate screening; exact formula variants still need golden validation |
 | `weak_utilities.*`, `two_d_weak_rates.*` | `weak.py` | Ported 2-D weak-rate table interpolation and weak source terms |
-| `thermo.*` | `thermo.py`, `nse.py` | Partial: common thermodynamic helpers and NSE; detailed libstatmech parity requires validation |
+| `thermo.*` | `thermo.py`, `electrons.py`, `nse.py` | Entropy of ions, electrons and positrons, and photons; density and temperature from entropy; NSE. The electron gas is checked against closed-form limits and thermodynamic identities, not against a libstatmech build |
 | `matrix_solver.*`, `ilu_solvers.*` | `matrix_solver.py`, `solver.py` | Ported to SciPy sparse solvers and stiff integrators |
 | `hydro.*`, `hydro_helper.*` | `hydro.py` | Ported trajectory interpolation and exponential expansion |
 | `network_limiter.*` | `network_limiter.py` | Ported species/reaction subnetwork limiting |

@@ -88,7 +88,11 @@ class Network:
         return sorted(names, key=lambda n: (self.species.get(n, Species.parse(n) if n != '' else Species('n',0,1)).z, self.species.get(n, Species.parse(n) if n != '' else Species('n',0,1)).a))
 
     def zone(self, index: int = 0) -> Zone:
-        return self.zones[index]
+        try:
+            return self.zones[index]
+        except IndexError:
+            raise IndexError(f"zone index {index} is out of range: the network has "
+                             f"{len(self.zones)} zone(s)") from None
 
     def validate(self) -> Dict[str, object]:
         from .species import is_massless

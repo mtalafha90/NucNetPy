@@ -6,7 +6,7 @@ from ..io.xml import read_xml, write_xml
 from ..io.jina import read_jina_xml, combine_jina_xml, jina_database_summary
 from ..analysis import largest_mass_fractions, species_history, flows, ydot, element_abundances, abundance_moment, energy_generation_rate, compare_rates, charge_changing_flows, system_timescales, entropy_generation_rate
 from ..detailed_balance import net_flows as detailed_net_flows
-from ..solver import evolve_zone, constant_thermo, time_grid
+from ..solver import evolve_zone, constant_thermo, time_grid, METHODS
 from ..graph import reaction_network_dot
 from ..nse import solve_nse
 from ..validation import validate_network, validate_zone
@@ -14,6 +14,16 @@ from ..validation import validate_network, validate_zone
 
 def _load(path):
     return read_xml(path)
+
+
+def _properties(zone):
+    """All of a zone's properties.
+
+    libnucnet zone files keep T9 and rho among the optional properties, so
+    showing only ``zone.properties`` prints nothing for them.  Where a name
+    appears in both, ``zone.properties`` wins, as in ``Zone.temperature9``.
+    """
+    return {**zone.optional_properties, **zone.properties}
 
 
 def cmd_summary(args):
@@ -30,7 +40,7 @@ def cmd_print_output(args):
     n = _load(args.xml)
     cmd_summary(args)
     for i, z in enumerate(n.zones[:args.max_zones]):
-        print(f"zone {i} label={z.label} props={z.properties}")
+        print(f"zone {i} label={z.label} props={_properties(z)}")
         for name, y in sorted(z.abundances.items()):
             if y >= args.min_abundance:
                 print(f"  {name:8s} {y:.8e}")
@@ -50,7 +60,7 @@ def cmd_zone_abundances(args):
 
 def cmd_zone_properties(args):
     n = _load(args.xml); z = n.zone(args.zone_index)
-    for k, v in sorted(z.properties.items()): print(k, v)
+    for k, v in sorted(_properties(z).items()): print(k, v)
 
 
 def cmd_element(args):
@@ -164,8 +174,17 @@ def cmd_evolve(args):
 
 
 def cmd_energy(args):
+    from ..analysis import nuclear_energy_generation_rate
+    from ..constants import AVOGADRO, MEV_TO_ERG
     n = _load(args.xml)
-    print(energy_generation_rate(n, args.zone_index, args.t9, args.rho))
+    # The mass-excess form is exact and consistent with the equilibrium
+    # solvers.  The Q-value form uses the rates' own Q-values, which matters
+    # for a network whose nuclides carry no mass excesses.  Both are printed in
+    # erg/g/s; energy_generation_rate itself returns MeV per nucleon per second.
+    from_masses = nuclear_energy_generation_rate(n, args.zone_index, args.t9, args.rho)
+    from_q = energy_generation_rate(n, args.zone_index, args.t9, args.rho) * AVOGADRO * MEV_TO_ERG
+    print(f"from mass excesses  {from_masses:.12e} erg/g/s")
+    print(f"from reaction Q     {from_q:.12e} erg/g/s")
 
 
 def cmd_dot(args):
@@ -261,7 +280,7 @@ def build_parser():
     s = sub.add_parser('export-zone-xml'); add_xml(s); s.add_argument('output'); s.add_argument('--zone-index', type=int, default=0); s.set_defaults(func=cmd_export_zone_xml)
     s = sub.add_parser('reactions-latex'); add_xml(s); s.add_argument('output'); s.set_defaults(func=cmd_reactions_latex)
     s = sub.add_parser('species-history'); add_xml(s); s.add_argument('species'); s.set_defaults(func=cmd_species_history)
-    s = sub.add_parser('evolve-zone'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t0', type=float, default=0.0); s.add_argument('--t1', type=float, default=1.0); s.add_argument('--steps', type=int, default=50); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--method', default='bdf'); s.add_argument('--log-time', action='store_true'); s.add_argument('--min-abundance', type=float, default=0.0); s.set_defaults(func=cmd_evolve)
+    s = sub.add_parser('evolve-zone'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t0', type=float, default=0.0); s.add_argument('--t1', type=float, default=1.0); s.add_argument('--steps', type=int, default=50); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--method', default='bdf', type=str.lower, choices=METHODS); s.add_argument('--log-time', action='store_true'); s.add_argument('--min-abundance', type=float, default=0.0); s.set_defaults(func=cmd_evolve)
     s = sub.add_parser('energy-generation'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.set_defaults(func=cmd_energy)
     s = sub.add_parser('net-dot'); add_xml(s); s.add_argument('-o','--output'); s.add_argument('--t9', type=float, default=1.0); s.add_argument('--rho', type=float, default=1.0); s.add_argument('--min-rate', type=float, default=0.0); s.set_defaults(func=cmd_dot)
     s = sub.add_parser('validate'); add_xml(s); s.add_argument('--strict', action='store_true'); s.add_argument('--max', type=int, default=50); s.add_argument('--max-zones', type=int, default=10); s.set_defaults(func=cmd_validate)
@@ -286,5 +305,13 @@ def build_parser():
 
 
 def main(argv=None):
+    import xml.etree.ElementTree as ET
     args = build_parser().parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except (OSError, ET.ParseError, IndexError, ValueError) as exc:
+        # Input mistakes -- a missing or malformed file, a zone index that
+        # does not exist, an unknown option value -- get one line, not a
+        # traceback.  Anything else is a bug and keeps its traceback.
+        print(f"nucnetpy {args.cmd}: error: {exc}", file=sys.stderr)
+        return 1

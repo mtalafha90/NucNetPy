@@ -208,7 +208,13 @@ def main() -> int:
             "rtol": 1.0e-6,
             "atol": 1.0e-18,
             "xsum_atol": 1.0e-9,
-            "detailed_balance_rtol": 1.0e-3,
+            "detailed_balance_rtol": 1.0e-2,
+            "detailed_balance_comment": "The detailed-balance figures are "
+                "residuals at the integrator's tolerance, so they move with "
+                "floating-point details by about 0.1 per cent between machines. "
+                "They are compared to 1 per cent with no absolute floor, which "
+                "keeps the two figures quoted in the documentation; losing "
+                "detailed balance changes them by orders of magnitude.",
         },
         "environment": environment_record(),
     }

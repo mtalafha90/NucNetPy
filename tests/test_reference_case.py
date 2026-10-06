@@ -110,7 +110,7 @@ def test_detailed_balance_result_reproduces(network, spec):
     if not exp:
         pytest.skip("archive predates the detailed-balance expectations")
     c, tol = spec["conditions"], spec["tolerances"]
-    rtol = tol.get("detailed_balance_rtol", 1.0e-3)
+    rtol = tol.get("detailed_balance_rtol", 1.0e-2)
     for label, want in exp.items():
         net = consistent_reverse_network(
             read_xml(str(REFERENCE / spec["network"]["file"])),
@@ -129,7 +129,9 @@ def test_detailed_balance_result_reproduces(network, spec):
               if k in net.species}
         d = [abs(xn.get(k, 0.0) - v) / v for k, v in xq.items()
              if k not in {"n", "h1"} and v >= 1.0e-6]
+        # atol=0: numpy's default atol of 1e-8 is a sizeable fraction of
+        # these residuals and would widen the check to about 14 per cent.
         assert np.isclose(float(np.median(d)), want["median_rel_diff_vs_nse"],
-                          rtol=rtol), label
+                          rtol=rtol, atol=0.0), label
         assert np.isclose(float(max(d)), want["max_rel_diff_vs_nse"],
-                          rtol=rtol), label
+                          rtol=rtol, atol=0.0), label

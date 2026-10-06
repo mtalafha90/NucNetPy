@@ -56,8 +56,8 @@
       "si28": 0.00010184849022498099,
       "ti44": 9.270300581872407e-06
     },
-    "nse_mu_p": -2.557229515410909,
-    "nse_mu_n": -2.525381878412565,
+    "nse_mu_p": -2.541305696911736,
+    "nse_mu_n": -2.5413056969117354,
     "nse_xsum": 1.0000000000000173,
     "nse_ye": 0.5000000000000087,
     "detailed_balance": {
@@ -78,7 +78,8 @@
     "rtol": 1e-06,
     "atol": 1e-18,
     "xsum_atol": 1e-09,
-    "detailed_balance_rtol": 0.001
+    "detailed_balance_rtol": 0.01,
+    "detailed_balance_comment": "The detailed-balance figures are residuals at the integrator's tolerance, so they move with floating-point details: GitHub's runners give a median of 6.958e-08 against 6.966e-08 here, a difference of 0.11 per cent. They are compared to 1 per cent with no absolute floor, which keeps the two figures quoted in the documentation; losing detailed balance changes them by orders of magnitude."
   },
   "environment": {
     "nucnetpy": "1.0.0",

@@ -1,7 +1,8 @@
 # Command line
 
 Installing the package puts a `nucnetpy` command on the path. This page is
-generated from the argument parser, so it matches the code.
+generated from the argument parser by `docs/manual/generate_cli_reference.py`,
+so it matches the code.
 
 ```
 usage: nucnetpy [-h]
@@ -319,8 +320,8 @@ options:
 ```
 usage: nucnetpy evolve-zone [-h] [--zone-index ZONE_INDEX] [--t0 T0] [--t1 T1]
                             [--steps STEPS] [--t9 T9] [--rho RHO]
-                            [--method METHOD] [--log-time]
-                            [--min-abundance MIN_ABUNDANCE]
+                            [--method {bdf,radau,lsoda,rk45,dop853,rk4,euler,implicit_euler,backward_euler}]
+                            [--log-time] [--min-abundance MIN_ABUNDANCE]
                             xml
 
 positional arguments:
@@ -334,7 +335,7 @@ options:
   --steps STEPS
   --t9 T9
   --rho RHO
-  --method METHOD
+  --method {bdf,radau,lsoda,rk45,dop853,rk4,euler,implicit_euler,backward_euler}
   --log-time
   --min-abundance MIN_ABUNDANCE
 ```
@@ -467,4 +468,3 @@ options:
   -h, --help            show this help message and exit
   --zones-xml ZONES_XML
 ```
-
