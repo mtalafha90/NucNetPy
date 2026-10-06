@@ -60,12 +60,18 @@ which routines were written by working from named C++ source files.
 - **Screening** — `SkyNetScreening` assigns each charge a Coulomb chemical
   potential mu(Z)/kT, blending weak, intermediate and strong regimes. Because it
   is a chemical potential it applies consistently to forward and reverse rates,
-  so screening does not break detailed balance. With `pair_term=Ye` for
-  non-degenerate electrons it reproduces the Salpeter weak limit to 0.02%.
+  so screening does not break detailed balance. The electrons' share of the
+  screening is worked out from the electron gas, so it is right for both
+  ordinary stars and degenerate matter.
+- **Entropy** — the physical entropy per nucleon (ions with real masses, spins
+  and partition functions; relativistic, degenerate electrons and positrons;
+  photons; optional Coulomb term), the density or temperature that gives a
+  target entropy, and a driver for constant-entropy expansions.
 - **Detailed balance** — reverse reaction rates from the forward rate, masses,
   and partition functions; forward/reverse/net flows that vanish at NSE;
   tabulated photodisintegration partners for (n,γ)-(γ,n) studies.
-- **Physics helpers** — electron screening (weak/intermediate), 2-D weak-rate
+- **Physics helpers** — the electron-positron gas (chemical potential,
+  pressure, entropy), electron screening (weak/intermediate), 2-D weak-rate
   tables, decays and fission channels, hydrodynamic trajectories, neutrino
   rates, and thermodynamic utilities.
 - **Analysis & validation** — largest mass fractions, element abundances,
@@ -294,18 +300,19 @@ reactants and the fused compound charge. It extends to more than two charged
 reactants and, being a chemical potential, applies consistently to forward and
 reverse rates, so screening does not undo detailed balance.
 
-Its default treats the electrons as fully degenerate, so only the ions screen.
-Where the electrons are not degenerate, as in hydrogen and helium burning in
-ordinary stars, pass `pair_term=Ye`; it then reproduces the Salpeter
-weak-screening limit to 0.02 per cent. Without it the weak-screening exponent
-is too small by up to a factor `sqrt(1 + Ye / sum Z^2 Y)`, 22 per cent for
-pure helium.
+The electrons screen too, by an amount that depends on how degenerate they
+are. `SkyNetScreening` works this out from the electron gas
+(`nucnetpy.electrons`) each time the temperature, density or `Ye` changes:
+for non-degenerate electrons, as in hydrogen and helium burning in ordinary
+stars, it recovers the Salpeter weak-screening limit; for degenerate electrons,
+as in a white dwarf, they drop out; and in hot, thin matter positron pairs add
+to the screening. A number passed as `pair_term` overrides the calculation.
 
 ```python
 from nucnetpy import SkyNetScreening
 
 evolve_zone(net, zone, times, thermo=..., screening=SkyNetScreening(net.species))
-evolve_zone(net, zone, times, thermo=..., screening=SkyNetScreening(net.species, pair_term=0.5))  # Ye = 0.5, non-degenerate
+evolve_zone(net, zone, times, thermo=..., screening=SkyNetScreening(net.species, pair_term=0.0))  # ions only
 ```
 
 The nuclear energy generation rate follows from the change in total mass excess,
@@ -317,6 +324,26 @@ Q-values when the two data sources use different nuclear masses:
 
 ```python
 from nucnetpy import nuclear_energy_generation_rate, nuclear_energy_release
+```
+
+## Entropy
+
+`entropy_per_nucleon` gives the entropy per nucleon, in units of Boltzmann's
+constant, split into ions, electrons and positrons, photons and (optionally)
+the Coulomb correction. `density_for_entropy` and `t9_for_entropy` find the
+density or temperature that gives a target entropy at fixed composition, and
+`constant_entropy_thermo` drives a network along a constant-entropy expansion.
+
+```python
+import math
+from nucnetpy import entropy_per_nucleon, density_for_entropy, constant_entropy_thermo
+
+s = entropy_per_nucleon(zone.abundances, net, t9=5.0, rho=1.0e8)
+print(s.ions, s.electrons, s.photons, s.total)
+rho = density_for_entropy(s.total, zone.abundances, net, t9=5.0)   # 1.0e8 again
+
+expansion = constant_entropy_thermo(s.total, lambda t: 1.0e8 * math.exp(-t / 0.1), net)
+evolve_zone(net, zone, times, thermo=expansion)
 ```
 
 ---
@@ -402,7 +429,7 @@ Tutorial notebooks live in `notebooks/` and are best followed in order:
 | `06_validation_and_regression_workflow` | conservation, golden files, and their limits |
 | `07_using_jina_xml_database` | reading and cutting a JINA database |
 | `08_validate_real_jina_files` | a full production database (bring your own) |
-| `09_thermodynamic_consistency` | detailed balance vs library reverse rates; energy release |
+| `09_thermodynamic_consistency` | detailed balance vs library reverse rates; energy release; entropy |
 
 ```bash
 python -m pip install -e ".[notebook]"
@@ -436,7 +463,8 @@ NucNetPy/
     ├── coulomb.py               # Bravo & Garcia-Senz plasma corrections
     ├── screening.py             # electron-screening factors
     ├── weak.py                  # weak-rate tables
-    ├── thermo.py                # thermodynamic helpers
+    ├── electrons.py             # electron-positron gas
+    ├── thermo.py                # entropy and its inversion
     ├── analysis.py              # flows, timescales, entropy, currents, ...
     ├── validation.py            # validation / regression helpers
     ├── decay.py, hydro.py, neutrino.py, network_limiter.py,

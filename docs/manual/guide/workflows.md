@@ -140,12 +140,48 @@ fused compound charge. Being a chemical potential, it applies consistently to
 forward and reverse rates, so screening does not undo detailed balance. A
 pairwise Salpeter factor is also available through `reaction_screening_factor`.
 
-The default treats the electrons as fully degenerate, so only the ions screen.
-Where the electrons are not degenerate, as in hydrogen and helium burning in
-ordinary stars, pass `pair_term=Ye` (for example
-`SkyNetScreening(net.species, pair_term=0.5)`). That recovers the Salpeter weak
-limit; without it the weak-screening exponent is too small by up to a factor
-`sqrt(1 + Ye / sum Z^2 Y)`, 22 per cent for pure helium.
+The electrons screen too, by an amount that depends on how degenerate they
+are, and `SkyNetScreening` works it out from the electron gas
+(`nucnetpy.electrons`):
+
+- for non-degenerate electrons, as in hydrogen and helium burning in ordinary
+  stars, it recovers the Salpeter weak-screening limit;
+- for degenerate electrons, as in a white dwarf, they no longer screen;
+- in hot, thin matter, positron pairs add to the screening.
+
+The electron state is recomputed only when the temperature, density or `Ye`
+changes, which costs about a millisecond. To fix the electrons' share
+yourself, pass a number as `pair_term`: `pair_term=0.0` keeps the ions only,
+and `pair_term=Ye` treats the electrons as non-degenerate.
+
+## Entropy
+
+```python
+s = nn.entropy_per_nucleon(zone.abundances, net, t9=5.0, rho=1.0e8)
+s.ions, s.electrons, s.photons, s.coulomb, s.total
+```
+
+The entropy per nucleon, in units of Boltzmann's constant, comes in parts:
+
+- **ions** — the Sackur-Tetrode entropy of each species, with its real mass,
+  ground-state spin and partition function (the last adds the entropy of the
+  excited states);
+- **electrons and positrons** — from the electron gas, at any degeneracy;
+- **photons** — black-body radiation;
+- **Coulomb** — the plasma correction, off unless `coulomb=True`.
+
+To go the other way, `nn.density_for_entropy(s, abundances, net, t9)` and
+`nn.t9_for_entropy(s, abundances, net, rho)` find the density or temperature
+that gives entropy `s` at fixed composition. The entropy changes steadily with
+both, so the answer is unique.
+
+`nn.constant_entropy_thermo(s, density, net)` turns this into a `thermo`
+callable: you give the density as a function of time, and the temperature is
+set at each step so that the current composition has entropy `s`. This is the
+usual way to follow matter as it expands and cools. The heat from the
+reactions is not fed back, so use it once the burning has slowed, as in a
+freeze-out. Burning that reduces the number of particles (helium to carbon,
+say) makes the temperature rise at fixed entropy.
 
 ## Energy release
 

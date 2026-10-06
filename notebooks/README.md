@@ -32,7 +32,7 @@ cells skip cleanly when the files are absent, so it can still be read and run.
 | `06_validation_and_regression_workflow` | Conservation along a trajectory, golden files, and what they do *not* prove |
 | `07_using_jina_xml_database` | Reading JINA files, validating them, cutting a network down to size |
 | `08_validate_real_jina_files` | Working with a full production database (bring your own) |
-| `09_thermodynamic_consistency` | Detailed balance against library reverse rates; energy release |
+| `09_thermodynamic_consistency` | Detailed balance against library reverse rates; energy release; entropy and a constant-entropy expansion |
 
 ## Using notebook 08 with your own data
 
