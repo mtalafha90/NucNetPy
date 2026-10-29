@@ -7,6 +7,7 @@ flux evaluation suitable for one-zone evolution and analysis commands.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import bisect
 import math
 from collections import Counter, defaultdict
 from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Any
@@ -54,6 +55,56 @@ class RateFit:
             return 0.0
         return float(math.exp(expo))
 
+def _interp_partition(keys: Sequence[float], values: Sequence[float], t9: float) -> float:
+    """Interpolate a partition-function table as :func:`nucnetpy.nse._partition` does.
+
+    Linear in T9 and held constant beyond the table, as ``numpy.interp`` is,
+    but without its per-call array conversion: this runs once per reverse rate
+    per right-hand-side evaluation.
+    """
+    if not keys:
+        return 1.0
+    if len(keys) == 1 or t9 <= keys[0]:
+        return float(values[0])
+    if t9 >= keys[-1]:
+        return float(values[-1])
+    i = bisect.bisect_right(keys, t9)
+    x0, x1 = keys[i - 1], keys[i]
+    return float(values[i - 1] + (values[i] - values[i - 1]) * (t9 - x0) / (x1 - x0))
+
+
+@dataclass
+class PartitionRatio:
+    """The factor ``prod G(products) / prod G(reactants)`` of a reverse rate.
+
+    ReacLib derives each reverse rate (flag ``v``) from its forward rate by
+    detailed balance with the ground-state spins only, and expects the user to
+    multiply it by this ratio of normalised partition functions.  Each entry is
+    ``(t9 points, G values, multiplicity)`` for one nuclear species, taken from
+    the nuclide file and interpolated exactly as the NSE solver interpolates
+    it, so that a corrected reverse rate and :func:`nucnetpy.solve_nse` use the
+    same partition functions.  See
+    :func:`nucnetpy.apply_reverse_partition_functions`.
+    """
+    numerator: Tuple[Tuple[Tuple[float, ...], Tuple[float, ...], int], ...] = ()
+    denominator: Tuple[Tuple[Tuple[float, ...], Tuple[float, ...], int], ...] = ()
+    # The integrator asks for every rate at the same temperature many times.
+    _last: List[float] = field(default_factory=lambda: [float("nan"), 1.0],
+                               init=False, repr=False, compare=False)
+
+    def __call__(self, t9: float) -> float:
+        t9 = float(t9)
+        if t9 == self._last[0]:
+            return self._last[1]
+        value = 1.0
+        for keys, values, count in self.numerator:
+            value *= _interp_partition(keys, values, t9) ** count
+        for keys, values, count in self.denominator:
+            value /= _interp_partition(keys, values, t9) ** count
+        self._last[0], self._last[1] = t9, value
+        return value
+
+
 @dataclass
 class TabularRate:
     t9: Sequence[float]
@@ -92,6 +143,11 @@ class Reaction:
     #: cannot be written to XML, so a network containing one does not
     #: round-trip; tabulate the rate instead when persistence is required.
     rate_function: Optional[Callable[[float], float]] = None
+    #: Partition-function factor applied to the ReacLib fits of a library
+    #: reverse rate, which the library fits with ground-state spins only.  Set
+    #: by :func:`nucnetpy.apply_reverse_partition_functions`, which the XML
+    #: readers call; ``None`` for every other reaction.
+    partition_ratio: Optional[PartitionRatio] = None
 
     @classmethod
     def from_names(cls, reactants: Sequence[str], products: Sequence[str], **kwargs) -> "Reaction":
@@ -133,9 +189,12 @@ class Reaction:
             total += self.tabular_rate.rate(t9)
         if self.rate_function is not None:
             total += float(self.rate_function(t9))
+        fitted = 0.0
         for fit in self.rate_fits:
-            total += fit.rate(t9)
-        return float(total)
+            fitted += fit.rate(t9)
+        if self.partition_ratio is not None and fitted:
+            fitted *= self.partition_ratio(t9)
+        return float(total + fitted)
 
     def rate(self, t9: float, rho: float = 1.0, ye: Optional[float] = None, screening: Optional[Callable[["Reaction", float, float, Optional[float]], float]] = None) -> float:
         total = self.bare_rate(t9, rho=rho, ye=ye)

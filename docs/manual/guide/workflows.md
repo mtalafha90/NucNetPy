@@ -100,19 +100,22 @@ Constrained cluster equilibria (the libnuceq workflow) use `solve_qse` with
 
 ## Thermodynamic consistency
 
-Rate libraries fit the forward and reverse directions of a reaction separately,
-so a network built from them relaxes to a state that is not the NSE of the same
-nuclear data.
+A network relaxes to the equilibrium of the rates it is given. ReacLib derives
+each reverse rate from its forward rate with the ground-state spins only, and
+the XML readers restore the partition functions it leaves out
+(`nn.apply_reverse_partition_functions`); without them the JINA alpha chain at
+$T_9=5$ settles a median 4.5 per cent away from NSE, with them 0.34 per cent.
+What remains comes from the library's Q values and fits.
 
 ```python
 consistent = nn.consistent_reverse_network(net)
 ```
 
-This pairs each reaction with its inverse, keeps the exothermic member, and
-regenerates the other from detailed balance. On the JINA alpha chain it improves
-agreement between the integrated composition and a separately solved NSE from a
-median of 4.5 per cent to 7 parts in 10^8, once the equilibrium is solved
-over the same species set the network can populate.
+This pairs each reaction with its inverse, keeps the exothermic member (judged
+from the masses), and regenerates the other from detailed balance. On the JINA
+alpha chain it brings the integrated composition and a separately solved NSE to
+8 parts in 10^8, once the equilibrium is solved over the same species set the
+network can populate.
 
 Read that second figure carefully. The regenerated reverse rates come from the
 same equilibrium prefactor `solve_nse` uses, so the two calculations now share

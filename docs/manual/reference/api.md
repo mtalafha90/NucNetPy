@@ -46,8 +46,8 @@ Pages are generated from the docstrings in the source.
 
 ```{eval-rst}
 .. automodule:: nucnetpy.detailed_balance
-   :members: consistent_reverse_network, reverse_rate, reverse_reaction,
-             log_equilibrium_constant, net_flows
+   :members: apply_reverse_partition_functions, consistent_reverse_network,
+             reverse_rate, reverse_reaction, log_equilibrium_constant, net_flows
 ```
 
 ## Screening, weak rates, decays

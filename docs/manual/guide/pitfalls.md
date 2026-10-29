@@ -24,21 +24,31 @@ link between otherwise unrelated reactions:
 limit_network(net, select_species(net, zmax=20))   # keeps the photodisintegrations
 ```
 
-## Assuming reverse rates are consistent with the masses
+## Using library reverse rates without their partition functions
 
 A network relaxes to the equilibrium implied by the **ratios of the rates it is
-given**, not to the equilibrium of the nuclear data. Rate libraries fit the two
-directions separately, so the two need not agree.
+given**, not to the equilibrium of the nuclear data. ReacLib derives each
+reverse rate from its forward rate by detailed balance with the ground-state
+spins only, and expects the user to multiply it by the ratio of partition
+functions, $\prod G_{\rm products}/\prod G_{\rm reactants}$ of the reverse
+reaction.
 
-Evaluated at the NSE composition, JINA's reverse fits leave the net flux of a
-reaction far from zero; rebuilt from detailed balance, the net flux vanishes to
-machine precision. On the alpha chain at $T_9=5$ the fits differ from detailed
-balance by a median factor of 1.10 and up to 1.72, which displaces equilibrium
-mass fractions by a median of 4.5 per cent.
+Left out, that factor is not small. On the alpha chain at $T_9=5$ the reverse
+fits then differ from detailed balance by a median factor of 1.10 and up to 1.72
+(for $^{56}$Ni$(\gamma,\alpha)$), and the network relaxes to a composition a
+median 4.5 per cent and up to 48 per cent away from NSE. Versions of NucNetPy
+before the fix did exactly that; the comparison with `solve_nse` is what
+exposed it.
 
+The XML readers now recognise the derived reverse rates from their coefficients,
+because libnucnet files do not carry ReacLib's `v` flag, and apply the ratio:
+the alpha chain then matches NSE to a median 0.34 per cent. For a network built
+in memory, call `apply_reverse_partition_functions(net)` yourself.
+
+What is left comes from the library's Q values and the accuracy of its fits.
 Use `consistent_reverse_network` if you need the network and the equilibrium
-solver to agree, and understand that you are then trusting the mass table over
-the library's reverse fit.
+solver to agree exactly, and understand that you are then trusting the nuclide
+file's masses over the library's Q values.
 
 ## Placeholder nuclear data in an equilibrium solve
 

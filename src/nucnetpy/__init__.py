@@ -20,7 +20,7 @@ from .matrix_solver import solve_linear
 from .network_limiter import limit_network, select_species
 from .neutrino import NeutrinoLuminosity, NeutrinoQuantity, geometric_flux_rate
 from .rate_modifiers import RateModifierRegistry, constant_factor, exp_temperature_factor
-from .detailed_balance import log_equilibrium_constant, reverse_rate, reverse_reaction, net_flows, consistent_reverse_network
+from .detailed_balance import log_equilibrium_constant, reverse_rate, reverse_reaction, net_flows, consistent_reverse_network, apply_reverse_partition_functions
 from .analysis import (charge_changing_flows, system_timescales, heavy_nuclei_abundance,
                        neutron_exposure, entropy_generation_rate, separation_energy,
                        integrated_currents, reaction_entropy_changes,
