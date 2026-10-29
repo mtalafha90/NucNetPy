@@ -21,8 +21,8 @@ for name, mass_excess in [("he4", 2.4249), ("be8", 4.9416),
                           ("c12", 0.0), ("o16", -4.7370)]:
     net.add_species(Species.parse(name, mass_excess=mass_excess, spin=0.0))
 
-# --- Reactions.  A rate library lists each reaction in both directions with
-# --- separately fitted rates.  The constant rates here are toy values.
+# --- Reactions.  A rate library lists each reaction in both directions; the
+# --- constant rates here are toy values.
 for reactants, products, rate, q in [(["be8"], ["he4", "he4"], 1e2, 0.0918),
                                      (["be8", "he4"], ["c12"], 1e9, 7.3666),
                                      (["c12", "he4"], ["o16"], 1e4, 7.1616)]:

@@ -20,6 +20,15 @@ It writes into validation/reference/:
 
 Reproducing the case afterwards needs only the first of those; see
 validation/reproduce_si_burning.py.
+
+After an intentional change to the physics, refresh the expected outputs from
+the archived network alone, without the database:
+
+    python validation/extract_reference_case.py --from-archive
+
+This recomputes only the "expected" and "environment" entries of
+si_burning_expected.json; the network, its checksum, the conditions, the
+tolerances and the provenance record are left as they are.
 """
 from __future__ import annotations
 
@@ -97,15 +106,98 @@ def environment_record() -> Dict[str, str]:
     }
 
 
+def compute_expected(network_path: Path) -> Dict[str, object]:
+    """Run the case from the archived file and return its expected outputs.
+
+    The archive is only useful if it is what reproduces the numbers, so the
+    expectations are always computed from the file, never from memory.
+    """
+    from nucnetpy.io.xml import read_xml
+    check = read_xml(str(network_path))
+    zone_r = check.zone(0)
+    ye = zone_r.ye(check.species)
+    times = time_grid(0.0, T_END, STEPS)
+    result = evolve_zone(check, zone_r, times, thermo=constant_thermo(T9, RHO),
+                         method="bdf", rtol=RTOL, atol=ATOL)
+    if not result.success:
+        raise RuntimeError(f"evolution failed: {result.message}")
+    nse = solve_nse(check, t9=T9, rho=RHO, ye=ye, species=nse_species(check))
+
+    final = result.final_abundances
+    xsum = sum(check.species[k].a * v for k, v in final.items() if k in check.species)
+
+    # The detailed-balance variant is the article's headline result, so the
+    # archive carries it too.  Reverse rates are rebuilt from the equilibrium
+    # constant, which shares its prefactor with solve_nse; the agreement below
+    # therefore measures mutual consistency, not the correctness of that
+    # shared formulation.
+    from nucnetpy.detailed_balance import consistent_reverse_network
+    db = {}
+    for label, tabulate in (("function", False), ("tabulated", True)):
+        dnet = consistent_reverse_network(read_xml(str(network_path)),
+                                          tabulate=tabulate)
+        dzone = dnet.zone(0)
+        dres = evolve_zone(dnet, dzone, times, thermo=constant_thermo(T9, RHO),
+                           method="bdf", rtol=RTOL, atol=ATOL)
+        dnse = solve_nse(dnet, t9=T9, rho=RHO, ye=ye,
+                         species=nse_species(dnet))
+        xn = {k: dnet.species[k].a * v for k, v in dres.final_abundances.items()
+              if k in dnet.species}
+        xq = {k: dnet.species[k].a * v for k, v in dnse.abundances.items()
+              if k in dnet.species}
+        diffs = [abs(xn.get(k, 0.0) - v) / v for k, v in xq.items()
+                 if k not in {"n", "h1"} and v >= 1.0e-6]
+        db[label] = {"evolve_success": bool(dres.success),
+                     "median_rel_diff_vs_nse": float(np.median(diffs)),
+                     "max_rel_diff_vs_nse": float(max(diffs))}
+
+    return {
+        "evolve_success": True,
+        "final_abundances": {k: float(v) for k, v in sorted(final.items())},
+        "final_xsum": float(xsum),
+        "nse_success": bool(nse.success),
+        "nse_abundances": {k: float(v) for k, v in sorted(nse.abundances.items())},
+        "nse_mu_p": float(nse.mu_p),
+        "nse_mu_n": float(nse.mu_n),
+        "nse_xsum": float(nse.xsum),
+        "nse_ye": float(nse.computed_ye),
+        "detailed_balance": db,
+    }
+
+
+def refresh_from_archive(outdir: Path) -> int:
+    """Recompute the expected outputs of an existing archive in place."""
+    spec_path = outdir / "si_burning_expected.json"
+    spec = json.loads(spec_path.read_text())
+    network_path = outdir / spec["network"]["file"]
+    digest = sha256(network_path)
+    if digest != spec["network"]["sha256"]:
+        print(f"{network_path} does not match the checksum recorded in "
+              f"{spec_path.name}; refusing to refresh", file=sys.stderr)
+        return 1
+    spec["expected"] = compute_expected(network_path)
+    spec["environment"] = environment_record()
+    spec_path.write_text(json.dumps(spec, indent=2) + "\n")
+    print(f"refreshed the expected outputs in {spec_path}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--nuclides", required=True)
-    ap.add_argument("--reactions", required=True)
+    ap.add_argument("--nuclides")
+    ap.add_argument("--reactions")
     ap.add_argument("--outdir", default=str(REFERENCE_DIR))
+    ap.add_argument("--from-archive", action="store_true",
+                    help="recompute the expected outputs from the archived "
+                         "network, without the database")
     args = ap.parse_args()
 
     outdir = Path(args.outdir)
+    if args.from_archive:
+        return refresh_from_archive(outdir)
+    if not (args.nuclides and args.reactions):
+        ap.error("--nuclides and --reactions are required unless --from-archive is given")
     outdir.mkdir(parents=True, exist_ok=True)
 
     nuc, rea = Path(args.nuclides), Path(args.reactions)
@@ -139,42 +231,11 @@ def main() -> int:
         "round trip lost reactions"
     assert check.zones, "round trip lost the initial zone"
 
-    zone_r = check.zone(0)
-    times = time_grid(0.0, T_END, STEPS)
-    result = evolve_zone(check, zone_r, times, thermo=constant_thermo(T9, RHO),
-                         method="bdf", rtol=RTOL, atol=ATOL)
-    if not result.success:
-        print(f"evolution failed: {result.message}", file=sys.stderr)
+    try:
+        expected_outputs = compute_expected(network_path)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
         return 1
-    nse = solve_nse(check, t9=T9, rho=RHO, ye=ye, species=nse_species(check))
-
-    final = result.final_abundances
-    xsum = sum(check.species[k].a * v for k, v in final.items() if k in check.species)
-
-    # The detailed-balance variant is the article's headline result, so the
-    # archive carries it too.  Reverse rates are rebuilt from the equilibrium
-    # constant, which shares its prefactor with solve_nse; the agreement below
-    # therefore measures mutual consistency, not the correctness of that
-    # shared formulation.
-    from nucnetpy.detailed_balance import consistent_reverse_network
-    db = {}
-    for label, tabulate in (("function", False), ("tabulated", True)):
-        dnet = consistent_reverse_network(read_xml(str(network_path)),
-                                          tabulate=tabulate)
-        dzone = dnet.zone(0)
-        dres = evolve_zone(dnet, dzone, times, thermo=constant_thermo(T9, RHO),
-                           method="bdf", rtol=RTOL, atol=ATOL)
-        dnse = solve_nse(dnet, t9=T9, rho=RHO, ye=ye,
-                         species=nse_species(dnet))
-        xn = {k: dnet.species[k].a * v for k, v in dres.final_abundances.items()
-              if k in dnet.species}
-        xq = {k: dnet.species[k].a * v for k, v in dnse.abundances.items()
-              if k in dnet.species}
-        diffs = [abs(xn.get(k, 0.0) - v) / v for k, v in xq.items()
-                 if k not in {"n", "h1"} and v >= 1.0e-6]
-        db[label] = {"evolve_success": bool(dres.success),
-                     "median_rel_diff_vs_nse": float(np.median(diffs)),
-                     "max_rel_diff_vs_nse": float(max(diffs))}
 
     expected = {
         "case": "silicon burning",
@@ -188,18 +249,7 @@ def main() -> int:
                     "sha256": sha256(network_path),
                     "species": len(check.species),
                     "reactions": len(check.reactions.reactions)},
-        "expected": {
-            "evolve_success": True,
-            "final_abundances": {k: float(v) for k, v in sorted(final.items())},
-            "final_xsum": float(xsum),
-            "nse_success": bool(nse.success),
-            "nse_abundances": {k: float(v) for k, v in sorted(nse.abundances.items())},
-            "nse_mu_p": float(nse.mu_p),
-            "nse_mu_n": float(nse.mu_n),
-            "nse_xsum": float(nse.xsum),
-            "nse_ye": float(nse.computed_ye),
-            "detailed_balance": db,
-        },
+        "expected": expected_outputs,
         "tolerances": {
             "comment": "Abundances are compared with numpy.isclose using these "
                        "values. They are loose enough to absorb BLAS and "

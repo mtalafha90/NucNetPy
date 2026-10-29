@@ -20,6 +20,7 @@ def read_jina_xml(
     nuclides_xml: str | Path,
     reactions_xml: str | Path,
     zones_xml: Optional[str | Path] = None,
+    reverse_partition_functions: bool = True,
 ) -> Network:
     """Read separate JINA/libnucnet nuclide and reaction XML files.
 
@@ -33,6 +34,11 @@ def read_jina_xml(
     zones_xml:
         Optional XML file containing zones/abundances.  If omitted, the returned
         network contains species and reactions but no zones.
+    reverse_partition_functions:
+        Multiply the library reverse rates by the partition functions that
+        ReacLib fits them without (default).  Pass ``False`` to keep the rates
+        exactly as fitted; see
+        :func:`nucnetpy.apply_reverse_partition_functions`.
 
     Returns
     -------
@@ -71,6 +77,10 @@ def read_jina_xml(
             pass
     if synthesised:
         net.metadata["species_without_nuclear_data"] = ",".join(sorted(synthesised))
+
+    if reverse_partition_functions:
+        from ..detailed_balance import apply_reverse_partition_functions
+        apply_reverse_partition_functions(net)
 
     if zones_xml is not None:
         zone_root = ET.parse(zones_xml).getroot()

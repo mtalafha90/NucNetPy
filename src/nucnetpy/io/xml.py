@@ -77,23 +77,29 @@ def _int_or_none(x):
     return None if v is None else int(v)
 
 
-def read_xml(path: str | Path) -> Network:
-    root = ET.parse(path).getroot()
-    net = Network(metadata={"source_file": str(path)})
-    _parse_species(root, net)
-    _parse_reactions(root, net)
-    _parse_zones(root, net)
-    return net
+def read_xml(path: str | Path, reverse_partition_functions: bool = True) -> Network:
+    """Read a libnucnet-style XML file holding nuclides, reactions and zones.
+
+    With ``reverse_partition_functions`` (the default) the library reverse
+    rates are multiplied by the partition functions they are fitted without;
+    see :func:`nucnetpy.apply_reverse_partition_functions`.
+    """
+    return read_xml_root(ET.parse(path).getroot(), source=str(path),
+                         reverse_partition_functions=reverse_partition_functions)
 
 
 read_network_xml = read_xml
 
 
-def read_xml_root(root, source: str = '<xml-root>') -> Network:
+def read_xml_root(root, source: str = '<xml-root>',
+                  reverse_partition_functions: bool = True) -> Network:
     net = Network(metadata={"source_file": str(source)})
     _parse_species(root, net)
     _parse_reactions(root, net)
     _parse_zones(root, net)
+    if reverse_partition_functions:
+        from ..detailed_balance import apply_reverse_partition_functions
+        apply_reverse_partition_functions(net)
     return net
 
 
@@ -448,6 +454,7 @@ def write_xml(network: Network, path: str | Path) -> None:
 write_zone_xml = write_xml
 
 
-def read_xml_string(text: str) -> Network:
+def read_xml_string(text: str, reverse_partition_functions: bool = True) -> Network:
     root = ET.fromstring(text)
-    return read_xml_root(root, source='string')
+    return read_xml_root(root, source='string',
+                         reverse_partition_functions=reverse_partition_functions)

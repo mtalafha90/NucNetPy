@@ -48,15 +48,16 @@ which routines were written by working from named C++ source files.
   constrained cluster equilibria (`solve_qse`, the libnuceq cluster workflow);
   optional Bravo & García-Senz **Coulomb corrections** ported from the NucNet
   Tools C++ source.
+- **Reverse rates with partition functions** — ReacLib fits its reverse rates
+  with the ground-state spins only and leaves the partition-function ratio to
+  the user. The XML readers recognise those rates from their coefficients and
+  apply the ratio (`apply_reverse_partition_functions()`). Without it the alpha
+  chain at T9=5 relaxed to a composition 4.5% (median) and up to 48% away from
+  NSE; with it the network matches `solve_nse` to 0.34% (median).
 - **Thermodynamic consistency** — `consistent_reverse_network()` rebuilds every
-  reverse rate from detailed balance instead of the library's independently
-  fitted value. Rate libraries fit the two directions separately, so a network
-  built from them relaxes to a state that is *not* the NSE of the same nuclear
-  data: for the alpha chain at T9=5 the fitted reverse rates differ from the
-  detailed-balance value implied by that mass table by a median factor 1.10,
-  displacing equilibrium mass fractions by a median 4.5%. Rebuilt from detailed
-  balance, and with the equilibrium solved over the same species set, the
-  network reproduces `solve_nse` to **7e-8**.
+  reverse rate from detailed balance with the nuclide file's own masses, so the
+  network relaxes exactly to the NSE of those data: with the equilibrium solved
+  over the same species set, it reproduces `solve_nse` to **8e-8**.
 - **Screening** — `SkyNetScreening` assigns each charge a Coulomb chemical
   potential mu(Z)/kT, blending weak, intermediate and strong regimes. Because it
   is a chemical potential it applies consistently to forward and reverse rates,
@@ -221,27 +222,25 @@ and the reactant order of a flow. A photodisintegration is a one-body process.
 
 ### A network relaxes to the equilibrium of its rates
 
-Rate libraries fit the forward and reverse directions of a reaction separately,
-so their ratio is not exactly the equilibrium constant implied by the masses
-shipped alongside them. A network built from them settles somewhere that is not
-the NSE of the same nuclear data. On the JINA alpha chain at `T9 = 5` the
-reverse fits differ from the detailed-balance value implied by the mass table
-they are used with by a median factor of 1.10, displacing equilibrium mass
-fractions by a median of 4.5 per cent.
+ReacLib derives each reverse rate from its forward rate by detailed balance,
+but with the ground-state spins only: the temperature-dependent partition
+functions are left for the user to apply. The XML readers recognise those
+derived rates from their coefficients (libnucnet files do not carry ReacLib's
+`v` flag) and multiply them by the partition-function ratio; pass
+`reverse_partition_functions=False` to a reader to keep them as fitted. Without
+the ratio, the JINA alpha chain at `T9 = 5` relaxes to a composition a median
+4.5 per cent, and up to 48 per cent, away from the NSE of the same nuclear data.
+With it the two agree to a median 0.34 per cent. What remains comes from the
+library's own Q values and the accuracy of its fits, which match the nuclide
+file's masses to about one per cent in the rates.
 
-That is a statement about a pairing, not a verdict on the library. A fitted
-reverse rate may deliberately encode an evaluation that is not identical to the
-value derived from an accompanying mass table, and a rate compilation and a
-nuclide file need not have been built on the same mass evaluation in the first
-place. What the measurement shows is that both cannot be imposed at once.
-
-`consistent_reverse_network` rebuilds every reverse rate from detailed balance,
-which brings the integrated composition and the NSE solve into agreement at the
-level of a few parts in 10^8. Note what that number does and does not
-mean: the reverse rates are built from the same equilibrium prefactor
-`solve_nse` uses, so the two calculations now share their nuclear data and the
-agreement measures their mutual consistency, not the correctness of the shared
-formulation.
+`consistent_reverse_network` rebuilds every reverse rate from detailed balance
+with the nuclide file's masses, which brings the integrated composition and the
+NSE solve into agreement at the level of a few parts in 10^8. Note what that
+number does and does not mean: the reverse rates are built from the same
+equilibrium prefactor `solve_nse` uses, so the two calculations now share their
+nuclear data and the agreement measures their mutual consistency, not the
+correctness of the shared formulation.
 
 ```python
 from nucnetpy import consistent_reverse_network
@@ -249,9 +248,9 @@ from nucnetpy import consistent_reverse_network
 consistent = consistent_reverse_network(net)   # tabulate=True to keep it writable to XML
 ```
 
-It is an option rather than a default: deriving reverse rates from mass
-differences enforces consistency, but discards whatever measurement went into
-the library's reverse fit. Notebook 09 measures both sides of the trade-off.
+It is an option rather than a default: it replaces the library's reverse rates,
+with their own Q values, by values derived from the nuclide file. Notebook 09
+compares the two.
 
 ### A zone keeps its file metadata in `optional_properties`
 
@@ -495,8 +494,10 @@ comparison: integrating a trajectory to its stationary state and comparing with
 a separately solved NSE composition. Read the two cases differently.
 
 With the library's own forward and reverse fits the two sides share no
-numerical input, so the 4.5 per cent disagreement is a real statement about the
-data. With reverse rates rebuilt from detailed balance the agreement reaches a
+numerical input, which is how the comparison exposed reverse rates evaluated
+without their partition functions (a median 4.5 per cent disagreement before
+the fix, 0.34 per cent after). With reverse rates rebuilt from detailed balance
+the agreement reaches a
 few parts in 10^8, but the reverse rates are then derived from the same
 prefactor `solve_nse` uses, so that number measures how consistently the
 integrator, the stoichiometry and the equilibrium solver treat one shared

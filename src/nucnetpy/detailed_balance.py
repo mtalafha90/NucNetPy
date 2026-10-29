@@ -30,10 +30,18 @@ from typing import Dict, Mapping, Optional, Sequence, Tuple
 import numpy as np
 
 from .nse import _log_prefactor
-from .reactions import Reaction, TabularRate
-from .species import Species, normalize_species_name
+from .reactions import PartitionRatio, Reaction, TabularRate
+from .species import MASSLESS_SPECIES, Species, normalize_species_name
 
 _LOG_MAX = 700.0
+
+#: ReacLib writes the forward-to-reverse conversion with 1/(k in MeV/GK).
+_REACLIB_INV_K = 11.6045
+
+#: Participants that rule out a detailed-balance pair.  A photon may take part
+#: (a capture and its photodisintegration); a lepton may not (a beta decay and
+#: an electron capture are not each other's detailed-balance reverse).
+_LEPTONS = frozenset(name for name in MASSLESS_SPECIES if name != "gamma")
 
 
 def _nuclear(species_map: Mapping[str, Species], name: str) -> Optional[Species]:
@@ -56,6 +64,139 @@ def _side_stat_and_order(parts, species_map) -> Tuple[int, int]:
         stat *= math.factorial(p.count)
         order += p.count
     return stat, order
+
+
+def _q_value(reaction: Reaction, species_map: Mapping[str, Species],
+             placeholders: Sequence[str] = ()) -> float:
+    """Q of ``reaction`` in MeV from the nuclide masses, else its own record.
+
+    libnucnet reaction files carry no Q value, so ``reaction.q_value`` is zero
+    for every reaction read from one; the masses are the only reliable source.
+    The record's value is used only when a nuclear participant has no mass in
+    ``species_map`` or carries a placeholder mass.
+    """
+    total = 0.0
+    for sign, side in ((1.0, reaction.reactants), (-1.0, reaction.products)):
+        for p in side:
+            if normalize_species_name(p.species) in MASSLESS_SPECIES:
+                continue
+            sp = species_map.get(normalize_species_name(p.species))
+            if sp is None or sp.name in placeholders:
+                return float(reaction.q_value)
+            total += sign * p.count * float(sp.mass_excess)
+    return total
+
+
+def _is_library_reverse(candidate: Reaction, partner: Reaction,
+                        rtol: float) -> bool:
+    """True if every fit of ``candidate`` is ReacLib's reverse of a fit of ``partner``.
+
+    ReacLib derives a reverse rate from its forward rate by detailed balance:
+    the conversion keeps a2..a5, lowers a1 by 11.6045 Q (Q > 0 for the forward
+    reaction), raises a6 by 3/2 times the change in the number of nuclear
+    particles, and shifts a0 by the logarithm of the spin and mass factors.
+    That signature identifies a derived reverse rate without the ``v`` flag,
+    which libnucnet files do not carry.  An independently fitted reverse rate
+    does not share a2..a5 with its forward rate and is left alone.
+    """
+    if not candidate.rate_fits or not partner.rate_fits:
+        return False
+    if len(candidate.rate_fits) != len(partner.rate_fits):
+        return False
+    if (candidate.tabular_rate is not None or candidate.constant_rate is not None
+            or candidate.rate_function is not None):
+        return False
+    for r in (candidate, partner):
+        if any(normalize_species_name(p.species) in _LEPTONS
+               for p in r.reactants + r.products):
+            return False
+
+    def nuclear_count(side) -> int:
+        return sum(p.count for p in side
+                   if normalize_species_name(p.species) not in MASSLESS_SPECIES)
+
+    a6_shift = 1.5 * (nuclear_count(partner.reactants)
+                      - nuclear_count(partner.products))
+    cand = [list(fit.coefficients) for fit in candidate.rate_fits]
+    part = [list(fit.coefficients) for fit in partner.rate_fits]
+
+    def compatible(c, f) -> bool:
+        return (np.allclose(c[2:6], f[2:6], rtol=rtol, atol=1e-8)
+                and abs((c[6] - f[6]) - a6_shift) <= 1e-4)
+
+    # Every set shares one a1 shift, -11.6045 Q.  The sets need not be stored
+    # in the same order in the two records, and sets with a2..a5 = 0 match each
+    # other on those coefficients alone, so try each a1 shift the first set
+    # allows and accept the one under which all the sets pair up.
+    for first in part:
+        if not compatible(cand[0], first):
+            continue
+        a1_shift = cand[0][1] - first[1]
+        tol = 1e-4 * max(1.0, abs(a1_shift))
+        unused = list(part)
+        for c in cand:
+            match = next((f for f in unused if compatible(c, f)
+                          and abs((c[1] - f[1]) - a1_shift) <= tol), None)
+            if match is None:
+                break
+            unused.remove(match)
+        else:
+            # The reverse of an exothermic forward rate is the member with the
+            # lower a1.
+            return a1_shift < -1e-6
+    return False
+
+
+def _partition_table(species_map: Mapping[str, Species], name: str):
+    sp = species_map.get(normalize_species_name(name))
+    if sp is None or not sp.partition:
+        return (), ()
+    keys = tuple(float(k) for k in sorted(sp.partition))
+    return keys, tuple(float(sp.partition[k]) for k in keys)
+
+
+def apply_reverse_partition_functions(network, rtol: float = 1e-6) -> list:
+    r"""Multiply library reverse rates by the partition functions they omit.
+
+    ReacLib supplies a reverse rate for most reactions, flagged ``v`` in its
+    own format.  The library derives it from the forward rate by detailed
+    balance using the ground-state spins only, so the temperature-dependent
+    partition functions are left out and must be applied by the user: the
+    reverse rate of ``A -> B`` is the fitted value times
+    :math:`\prod_B G_i(T)/\prod_A G_i(T)`.  Evaluated without that factor, a
+    network relaxes to an equilibrium in which no nuclide has excited states,
+    which at :math:`T_9=5` differs from nuclear statistical equilibrium by up
+    to 48 per cent in the alpha-chain mass fractions.
+
+    libnucnet files do not carry the ``v`` flag, so each derived reverse rate
+    is recognised from its coefficients (see :func:`_is_library_reverse`) and
+    given a :class:`~nucnetpy.reactions.PartitionRatio` built from the
+    partition functions in ``network.species``.  Species without a table count
+    as :math:`G=1`.  The XML readers call this function by default; call it
+    yourself for a network assembled in memory, or pass
+    ``reverse_partition_functions=False`` to a reader to keep the uncorrected
+    rates.
+
+    Returns the list of reactions that were corrected.
+    """
+    reactions = network.reactions.reactions
+    by_key = {r.key: r for r in reactions}
+    corrected = []
+    for reaction in reactions:
+        partner = by_key.get((reaction.key[1], reaction.key[0]))
+        if partner is None or partner is reaction:
+            continue
+        if not _is_library_reverse(reaction, partner, rtol):
+            continue
+        numerator = tuple(_partition_table(network.species, p.species) + (p.count,)
+                          for p in reaction.products
+                          if normalize_species_name(p.species) not in MASSLESS_SPECIES)
+        denominator = tuple(_partition_table(network.species, p.species) + (p.count,)
+                            for p in reaction.reactants
+                            if normalize_species_name(p.species) not in MASSLESS_SPECIES)
+        reaction.partition_ratio = PartitionRatio(numerator, denominator)
+        corrected.append(reaction)
+    return corrected
 
 
 def log_equilibrium_constant(reaction: Reaction, species_map: Mapping[str, Species], t9: float, rho: float = 1.0, include_partition: bool = True) -> float:
@@ -139,37 +280,37 @@ def consistent_reverse_network(network, t9_grid: Optional[Sequence[float]] = Non
                                tabulate: bool = False):
     r"""Return a copy of ``network`` whose reverse rates obey detailed balance.
 
-    Rate libraries such as JINA ReacLib supply the forward and reverse
-    directions of a reaction as separately fitted expressions.  Their ratio is
-    therefore not exactly the equilibrium constant implied by the nuclear masses
-    and partition functions in the accompanying nuclide file, and a network
-    built from them relaxes to a stationary state that is not the nuclear
-    statistical equilibrium of those same data.  The discrepancy is not small:
-    for the alpha chain at :math:`T_9=5` the fitted reverse rates differ from
-    detailed balance by a median factor of 1.10, which displaces the equilibrium
-    mass fractions by a median of 4.5 per cent.
+    Rate libraries such as JINA ReacLib derive each reverse rate from its
+    forward rate by detailed balance, but with the library's own Q value, with
+    ground-state spins only, and as a fitted expression.  Once the partition
+    functions are restored (:func:`apply_reverse_partition_functions`, applied
+    by the XML readers), the library reverse rates of the alpha chain at
+    :math:`T_9=5` agree with the detailed-balance value implied by the nuclide
+    file to about one per cent, which still leaves the stationary state of the
+    network slightly away from the nuclear statistical equilibrium of those same
+    data.
 
     This function pairs every reaction with its inverse, keeps the exothermic
-    member of each pair, and regenerates the endothermic member from
+    member of each pair, judged from the nuclide masses because libnucnet files
+    carry no Q value, and regenerates the endothermic member from
     :func:`reverse_rate`.  Reactions with no inverse in the network are carried
     over unchanged.  The resulting network relaxes to the composition returned
-    by :func:`nucnetpy.solve_nse` to about one part in :math:`10^{5}`, so the
+    by :func:`nucnetpy.solve_nse` to about one part in :math:`10^{7}`, so the
     integrator and the equilibrium solver become mutually consistent.
 
     By default the reverse rate is attached as a callable evaluated exactly at
     whatever temperature the integrator asks for.  This matters: the reverse
     rate carries a factor :math:`\exp(-Q/kT)`, which is far too steep to
     interpolate accurately, and tabulating it on 200 logarithmically spaced
-    points degrades the agreement with equilibrium from one part in
-    :math:`10^{6}` to about one part in :math:`10^{3}`.  Pass ``tabulate=True``
+    points degrades the agreement with equilibrium from about one part in
+    :math:`10^{7}` to about one part in :math:`10^{3}`.  Pass ``tabulate=True``
     to sample the rate on ``t9_grid`` instead, which is less accurate but can be
     written to XML.
 
-    Note that this replaces measured or evaluated reverse rates with values
-    derived from mass differences, so it enforces thermodynamic consistency
-    rather than improving individual rates.  Where a library reverse rate is
-    known to be better than the masses it is derived from, keep the library
-    value instead.
+    Note that this replaces the library's reverse rates, which carry the
+    library's Q values and the error of its fits, with values derived from the
+    masses in the nuclide file, so it enforces thermodynamic consistency with
+    that file rather than improving individual rates.
     """
     import copy as _copy
 
@@ -177,6 +318,7 @@ def consistent_reverse_network(network, t9_grid: Optional[Sequence[float]] = Non
     grid = (np.geomspace(0.01, 10.0, 200) if t9_grid is None
             else np.asarray(t9_grid, dtype=float))
     by_key = {r.key: r for r in out.reactions.reactions}
+    placeholders = out.species_without_nuclear_data()
 
     rebuilt = []
     handled = set()
@@ -190,7 +332,8 @@ def consistent_reverse_network(network, t9_grid: Optional[Sequence[float]] = Non
             continue
         handled.add(reaction.key)
         handled.add(inverse.key)
-        forward = reaction if reaction.q_value >= inverse.q_value else inverse
+        forward = (reaction if _q_value(reaction, out.species, placeholders)
+                   >= _q_value(inverse, out.species, placeholders) else inverse)
         rebuilt.append(forward)
         if tabulate:
             rebuilt.append(reverse_reaction(forward, out.species, t9_grid=grid,
