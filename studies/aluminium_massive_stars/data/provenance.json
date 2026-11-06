@@ -1,0 +1,33 @@
+{
+ "comment": "Inputs of the NucNetPy reproduction of Abdallah & Ershaidat (2024, Jordan J. Phys. 17, 273). Regenerate with build_inputs.py.",
+ "network_file": "network_reaclib_default2_20220329_z28.xml.gz",
+ "network": {
+  "library": "reaclib_default2_20220329",
+  "library_sha256": "1680ab1f3e95078227fd9e3eb25973cc3ff312aff63091e4621652a21c3c1358",
+  "pynucastro": "3.2.0",
+  "max_z": 28,
+  "nuclides": 891,
+  "reactions": 10787,
+  "reverse_rates_flagged_v": 4520,
+  "weak_rates": {
+   "beta_neg": 1464,
+   "electron_capture": 3,
+   "beta_pos": 271
+  },
+  "electron_captures": [
+   "Be7_to_Li7_electron_capture_reaclib",
+   "He3_to_t_electron_capture_reaclib",
+   "p_p_to_d_electron_capture_reaclib"
+  ],
+  "masses_from_ame2020": 612,
+  "masses_from_reaclib_q": 279,
+  "spins_unknown": 305,
+  "partition_tables": 803,
+  "partition_source": "Rauscher & Thielemann (2000) FRDM, via pynucastro",
+  "partition_t9_max": 10.0,
+  "xml_sha256": "555979add132ba6551065668c163b3575081be46998e4d6b7eee1a88c27e86f7"
+ },
+ "composition_file": "initial_composition_lodders2003.json",
+ "composition_source_sha256": "4df2894613394ad1f5b8ff6d16906f4752ddd8ff0a9c92ba85f7fb56334b59f5",
+ "python": "3.11.18"
+}
