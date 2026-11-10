@@ -1,0 +1,37 @@
+{
+ "settings": {
+  "solver": "implicit-euler",
+  "screening": "none",
+  "max_change": 0.01,
+  "x_min": 1e-15,
+  "points": 300,
+  "reverse_rate_factor_reassigned": 339,
+  "electron_captures_times_rho_ye": true,
+  "silicon_unit": "yr",
+  "started_from": "results_check",
+  "nucnetpy": "1.0.0",
+  "numpy": "2.4.6",
+  "scipy": "1.17.1",
+  "python": "3.11.18",
+  "platform": "Linux-6.18.44-fc-v338-x86_64-with-glibc2.39"
+ },
+ "silicon": {
+  "t9": 3.6,
+  "rho": 30000000.0,
+  "duration": 0.733,
+  "unit": "yr",
+  "seconds": 23131720.8,
+  "success": true,
+  "message": "reached the end of the stage",
+  "steps": 23958,
+  "rejected_steps": 8024,
+  "nfev": 217914,
+  "njev": 56884,
+  "max_negative_mass_fraction_clipped": 0.0,
+  "wall_seconds": 1278.5,
+  "max_abs_xsum_minus_1": 1.3771828175634937e-06,
+  "ye_initial": 0.49762158151861735,
+  "ye_final": 0.46474732561000137,
+  "species_saved": 355
+ }
+}

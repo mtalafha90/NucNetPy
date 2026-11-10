@@ -24,8 +24,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
-from common import (ADVANCED, FIGURES, PAPER_FINAL, RESULTS, STAGE_BY_KEY,  # noqa: E402
-                    STAGES, UNITS)
+from common import (ADVANCED, FIGURES, PAPER_FINAL, PAPER_RAL_MEAN, RESULTS,  # noqa: E402
+                    STAGE_BY_KEY, STAGES, UNITS)
 
 #: numpy.trapezoid is NumPy 2; older releases call it trapz.
 trapezoid = getattr(np, "trapezoid", None) or np.trapz
@@ -147,9 +147,10 @@ def aluminium(results: Path, key: str):
     return stage, t / UNITS[stage.unit], series(x, "al26", len(t)), series(x, "al27", len(t))
 
 
-def time_average(t, f):
-    """(1/T) * integral of f over the stage, by the trapezoidal rule."""
-    return float(trapezoid(f, t) / (t[-1] - t[0]))
+def log_time_average(t, f):
+    """Average of f over the logarithm of time, on the output grid (t > 0)."""
+    lt = np.log(t[1:])
+    return float(trapezoid(f[1:], lt) / (lt[-1] - lt[0]))
 
 
 def figure7(results: Path, outdir: Path):
@@ -189,12 +190,18 @@ def figure8(results: Path, outdir: Path):
         with np.errstate(divide="ignore", invalid="ignore"):
             ratio = np.where(al27 > 0, al26 / al27, np.nan)
         ax.plot(tu, ratio, color=PALETTE[5], lw=1.8)
-        mean = time_average(tu, np.nan_to_num(ratio))
+        # The paper's stage averages match an average over the logarithm of
+        # time, which is what a plain mean over output steps that grow
+        # geometrically amounts to (see summarise.py).
+        mean = log_time_average(tu, np.nan_to_num(ratio))
         ax.axhline(mean, color=MUTED, lw=0.8)
-        ax.annotate(f"time average {mean:.2e}", xy=(stage.duration, mean), xytext=(0, 4),
-                    textcoords="offset points", ha="right", va="bottom", fontsize=8.5,
-                    color=INK2)
         ax.set_yscale("log")
+        lo, hi = ax.get_ylim()
+        high = (np.log(mean) - np.log(lo)) / (np.log(hi) - np.log(lo)) > 0.6
+        ax.annotate(f"average over log t: {mean:.2e}\npaper's average: "
+                    f"{PAPER_RAL_MEAN[key]:.2e}", xy=(0.98, 0.05 if high else 0.95),
+                    xycoords="axes fraction", ha="right", va="bottom" if high else "top",
+                    fontsize=8.5, color=INK2)
         ax.set_xlim(0, stage.duration)
         ax.set_xlabel(f"Time ({stage.unit})")
         ax.set_ylabel(r"$R_\mathrm{Al}$ = $X(^{26}$Al$)/X(^{27}$Al$)$")
