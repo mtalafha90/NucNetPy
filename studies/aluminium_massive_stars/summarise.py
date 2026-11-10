@@ -29,6 +29,9 @@ from pathlib import Path
 
 import numpy as np
 
+#: numpy.trapezoid is NumPy 2; older releases call it trapz.
+trapezoid = getattr(np, "trapezoid", None) or np.trapz
+
 from common import (ADVANCED, HERE, ILIADIS_FINAL, PAPER_FINAL, PAPER_RAL_MEAN,
                     PAPER_RAL_OVERALL, RESULTS, STAGES, STAGE_BY_KEY)
 
@@ -67,10 +70,10 @@ def ral_averages(results: Path, key: str):
     al27 = y[:, names.index("al27")] * 27
     r = np.divide(al26, al27, out=np.zeros_like(al26), where=al27 > 0)
     logt = np.log(t[1:])              # the logarithmic output grid, t > 0
-    return {"time_average": float(np.trapezoid(r, t) / (t[-1] - t[0])),
-            "log_time_average": float(np.trapezoid(r[1:], logt) / (logt[-1] - logt[0])),
+    return {"time_average": float(trapezoid(r, t) / (t[-1] - t[0])),
+            "log_time_average": float(trapezoid(r[1:], logt) / (logt[-1] - logt[0])),
             "final": float(r[-1]), "maximum": float(r.max()),
-            "integral_seconds": float(np.trapezoid(r, t)),
+            "integral_seconds": float(trapezoid(r, t)),
             "seconds": float(t[-1] - t[0])}
 
 

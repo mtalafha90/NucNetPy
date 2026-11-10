@@ -55,13 +55,31 @@ Z = 0.0133). Those totals add up to 1.0001 because of rounding, so the whole
 composition is then divided by 1.0001.
 
 **Integration.** Implicit (backward) Euler steps solved by Newton–Raphson
-iterations, the scheme NucNet Tools uses, built in `stepper.py` from
-NucNetPy's own right-hand side and analytic Jacobian. Each step is sized so
-that no mass fraction above 10⁻¹⁵ changes by more than about 2 per cent. The
+iterations, the scheme NucNet Tools uses (`stepper.py`). Each step is sized so
+that no mass fraction above 10⁻¹⁵ changes by more than 0.5 per cent. The
 next section explains why NucNetPy's own integrator, `evolve_zone`, could not
 be used. Results are recorded at 300 times per stage, spaced evenly in the
-logarithm of time from the start of the paper's time axis. A second run with
-steps twice as large (`results_coarse/`) shows how much the step size matters.
+logarithm of time from the start of the paper's time axis.
+
+The equations integrated are NucNetPy's. Within a stage the temperature and
+density are fixed, so every rate is a constant: `fastnet.py` asks NucNetPy for
+each of the 10,787 rates once, through `Reaction.rate`, and then evaluates
+NucNetPy's flow formula for all of them at once with sparse matrices. In the
+conditions of all six stages, with and without screening, this reproduces
+`nucnetpy.solver.rhs` and `nucnetpy.solver.analytic_jacobian` to 6 × 10⁻¹⁵,
+about a hundred times faster. Integrating hydrogen burning with NucNetPy's own
+two functions instead (`stepper.evolve(..., fast=False)`) gives the same final
+mass fractions to 4 × 10⁻¹².
+
+**Accuracy.** Implicit Euler is first-order accurate: halving the step halves
+the error. Hydrogen burning was also integrated with SciPy's BDF method at a
+relative tolerance of 10⁻⁶, which succeeds for that stage once NucNetPy's
+clipping of negative abundances is switched off. Against it, the final
+hydrogen abundance, which falls steeply as the stage ends, is 1.0 per cent
+high, and every other mass fraction above 10⁻¹² agrees to 0.03 per cent. A
+second run with steps twice as large (`results_check/`) differs from the main
+run by as much as the main run differs from the BDF result, so the difference
+between the two runs measures the error of the main run in every stage.
 
 **Screening.** The paper does not mention electron screening, so the main
 calculation leaves it out. A second run with NucNetPy's SkyNet screening is in
@@ -69,18 +87,30 @@ calculation leaves it out. A second run with NucNetPy's SkyNet screening is in
 
 ## How to reproduce
 
-From the repository root, with NucNetPy installed (`pip install -e .`), and
-matplotlib for the figures:
+Python 3.9 or later, NumPy, SciPy and, for the figures, matplotlib:
 
 ```bash
+git clone https://github.com/mtalafha90/NucNetPy.git
+cd NucNetPy
+git checkout claude/aluminium-massive-stars
+python -m pip install -e . matplotlib
 cd studies/aluminium_massive_stars
-python run_stages.py          # the six stages, a few hours in total
-python summarise.py           # results/comparison.md and .json
-python make_figures.py        # figures/fig1_hydrogen.png ... fig8_ratio.png
+
+python run_stages.py                                          # main run      -> results/
+python run_stages.py --max-change 0.01 --tag check            # accuracy check -> results_check/
+python run_stages.py --max-change 0.01 --screening skynet --tag screened
+python run_stages.py --stages silicon --silicon-unit yr --max-change 0.01 \
+    --tag silicon_year --from-results results_check           # silicon for 0.733 yr
+
+python summarise.py --check results_check    # results/comparison.md and .json
+python make_figures.py                       # figures/fig1_hydrogen.png ... fig9_comparison.png
 ```
 
-`python run_stages.py --screening skynet --tag screened` repeats the
-calculation with screening, writing to `results_screened/`.
+Each `run_stages.py` uses one processor core, so the four runs can go side by
+side in separate terminals; the silicon variant needs the check run's oxygen
+burning to have finished. Each run prints its progress and saves every stage
+as soon as it is done. Add `--resume` to carry on after an interruption from
+the last saved stage.
 
 The network and the initial composition are stored in `data/`, so the
 calculation needs nothing but NucNetPy. `build_inputs.py` regenerates them; it
@@ -110,8 +140,12 @@ abundances had built up to 10⁻⁵ of the baryon number.
 
 Implicit Euler does not have this problem. For a decaying abundance it takes
 y → y/(1 + λΔt), which can never turn negative, and that is why NucNet Tools
-uses it. Its price is first-order accuracy, so the steps must stay small; the
-whole calculation takes a few hours in pure Python.
+uses it. One detail matters here too: because NucNetPy's right-hand side
+treats a negative abundance as zero, a Newton iterate that dips below zero
+makes the iterations chatter about zero and fail to converge. In silicon
+burning that rejected one step in five. Since the implicit Euler solution is
+itself never negative, `stepper.py` keeps the iterates at or above zero, which
+removed the rejections and made silicon burning twelve times faster.
 
 ## Two things NucNetPy does not do yet
 
@@ -142,7 +176,8 @@ NucNetPy.
 |---|---|
 | `common.py` | The six stages, the species in each figure, the values the paper quotes, and the electron-capture factor |
 | `build_inputs.py` | Builds the network and the initial composition in `data/` |
-| `stepper.py` | Implicit Euler steps with Newton–Raphson iterations, built from NucNetPy's right-hand side and Jacobian |
+| `stepper.py` | Implicit Euler steps with Newton–Raphson iterations |
+| `fastnet.py` | NucNetPy's network equations at fixed temperature and density, evaluated as sparse matrices |
 | `run_stages.py` | Runs the six stages with NucNetPy |
 | `summarise.py` | Compares the results with the paper's values |
 | `make_figures.py` | Redraws Figs. 1–8 |

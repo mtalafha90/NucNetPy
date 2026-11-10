@@ -27,6 +27,9 @@ from matplotlib.lines import Line2D  # noqa: E402
 from common import (ADVANCED, FIGURES, PAPER_FINAL, RESULTS, STAGE_BY_KEY,  # noqa: E402
                     STAGES, UNITS)
 
+#: numpy.trapezoid is NumPy 2; older releases call it trapz.
+trapezoid = getattr(np, "trapezoid", None) or np.trapz
+
 # Categorical palette (fixed order) and chart ink, light surface.
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300",
            "#6250d6", "#e34948"]
@@ -146,7 +149,7 @@ def aluminium(results: Path, key: str):
 
 def time_average(t, f):
     """(1/T) * integral of f over the stage, by the trapezoidal rule."""
-    return float(np.trapezoid(f, t) / (t[-1] - t[0]))
+    return float(trapezoid(f, t) / (t[-1] - t[0]))
 
 
 def figure7(results: Path, outdir: Path):
