@@ -3,8 +3,13 @@
 Each stage holds the temperature and density of the paper's Table 1 for the
 stage's duration and starts from the composition the previous stage left.
 Hydrogen burning starts from the Lodders (2003) composition built by
-build_inputs.py.  The network is integrated with ``nucnetpy.evolve_zone``
-(SciPy's BDF method with NucNetPy's analytic Jacobian).
+build_inputs.py.
+
+By default each stage is integrated by implicit Euler steps with
+Newton-Raphson iterations, the scheme of NucNet Tools, built from NucNetPy's
+right-hand side and analytic Jacobian (see stepper.py).  ``--solver bdf``
+uses ``nucnetpy.evolve_zone`` with SciPy's BDF method instead, which fails on
+this network at hydrogen exhaustion (see README.md).
 
 For every stage the script writes ``results/<stage>.npz`` (times in seconds,
 species names and abundances on a logarithmic time grid) and adds the stage's
@@ -13,9 +18,17 @@ diagnostics to ``results/run_summary.json``.
     python run_stages.py                        # all six stages
     python run_stages.py --stages neon oxygen   # resume from saved stages
     python run_stages.py --screening skynet --tag screened
+    python run_stages.py --max-change 0.01 --tag half_steps
+    python run_stages.py --stages silicon --silicon-unit yr --tag silicon_year \\
+        --from-results results
 
 ``--screening skynet`` applies NucNetPy's SkyNet plasma screening; the paper
-does not mention screening, so the default is none.
+does not mention screening, so the default is none.  ``--max-change`` sets
+the largest fractional change of an abundance in one step, and so the
+accuracy.  ``--silicon-unit yr`` runs silicon burning for 0.733 years, the
+duration in the paper's Table 1, instead of the 0.733 days its figures show;
+``--from-results`` takes the composition the stage starts from out of
+another results directory.
 """
 from __future__ import annotations
 
@@ -28,8 +41,7 @@ from pathlib import Path
 
 import numpy as np
 
-from common import (RESULTS, STAGES, STAGE_BY_KEY, RateFactors, load_composition,
-                    load_network)
+from common import RESULTS, STAGES, RateFactors, load_composition, load_network
 
 #: Abundances kept in the saved trajectories.  A species is saved if its mass
 #: fraction exceeds this anywhere in the stage.
@@ -79,51 +91,61 @@ def output_times(stage, points: int) -> np.ndarray:
 
 
 class Progress:
-    """Constant temperature and density, reporting progress as it is asked for them.
+    """Report how far a long integration has got, every ``every`` calls."""
 
-    NucNetPy asks the thermodynamic function for the state once per
-    right-hand-side or Jacobian evaluation, which makes it a convenient place
-    to report how far a long integration has got.
-    """
-
-    def __init__(self, t9: float, rho: float, every: int = 2000):
-        self.t9, self.rho, self.every = float(t9), float(rho), int(every)
-        self.calls = 0
+    def __init__(self, every: int):
+        self.every, self.calls = int(every), 0
         self.start = time.perf_counter()
 
-    def __call__(self, t, abundances):
+    def report(self, t, what):
         self.calls += 1
         if self.calls % self.every == 0:
-            print(f"    t = {t:.3e} s after {self.calls} evaluations, "
+            print(f"    t = {t:.3e} s after {self.calls} {what}, "
                   f"{time.perf_counter() - self.start:.0f} s", flush=True)
-        return self.t9, self.rho
+
+    def thermo(self, t9, rho):
+        """A constant-state function for evolve_zone that also reports progress."""
+        def state(t, abundances):
+            self.report(t, "evaluations")
+            return float(t9), float(rho)
+        return state
 
 
 def run_stage(net, stage, abundances, args, screening):
-    from nucnetpy.core import Zone
-    from nucnetpy.solver import evolve_zone
-
-    zone = Zone(abundances=dict(abundances))
     times = output_times(stage, args.points)
     t0 = time.perf_counter()
-    result = evolve_zone(net, zone, times, thermo=Progress(stage.t9, stage.rho),
-                         method="bdf", rtol=args.rtol, atol=args.atol,
-                         screening=screening)
+    if args.solver == "bdf":
+        from nucnetpy.core import Zone
+        from nucnetpy.solver import evolve_zone
+        result = evolve_zone(net, Zone(abundances=dict(abundances)), times,
+                             thermo=Progress(2000).thermo(stage.t9, stage.rho),
+                             method="bdf", rtol=args.rtol, atol=args.atol,
+                             screening=screening)
+        if not result.success or len(result.time) != len(times):
+            raise RuntimeError(f"{stage.key}: {result.message}")
+        stats = {"nfev": int(result.nfev), "njev": int(result.njev)}
+    else:
+        from stepper import evolve
+        progress = Progress(500)
+        result = evolve(net, abundances, times, stage.t9, stage.rho, screening=screening,
+                        max_change=args.max_change, x_min=args.x_min,
+                        progress=lambda t, n: progress.report(t, "steps"))
+        if not result.success:
+            raise RuntimeError(f"{stage.key}: {result.message}")
+        stats = {"steps": result.steps, "rejected_steps": result.rejected,
+                 "nfev": result.nfev, "njev": result.njev,
+                 "max_negative_mass_fraction_clipped": result.max_negative_clipped}
     seconds = time.perf_counter() - t0
-    if not result.success or len(result.time) != len(times):
-        raise RuntimeError(f"{stage.key}: {result.message}")
     a = np.array([net.species[s].a for s in result.species], dtype=float)
     z = np.array([net.species[s].z for s in result.species], dtype=float)
     x = result.y * a[None, :]
     keep = np.max(x, axis=0) > SAVE_FLOOR
-    xsum = x.sum(axis=1)
     info = {
         "t9": stage.t9, "rho": stage.rho, "duration": stage.duration,
         "unit": stage.unit, "seconds": stage.seconds,
-        "success": bool(result.success), "message": result.message,
-        "nfev": int(result.nfev), "njev": int(result.njev),
+        "success": bool(result.success), "message": result.message, **stats,
         "wall_seconds": round(seconds, 1),
-        "max_abs_xsum_minus_1": float(np.max(np.abs(xsum - 1.0))),
+        "max_abs_xsum_minus_1": float(np.max(np.abs(x.sum(axis=1) - 1.0))),
         "ye_initial": float(result.y[0] @ z), "ye_final": float(result.y[-1] @ z),
         "species_saved": int(keep.sum()),
     }
@@ -137,15 +159,29 @@ def main() -> int:
     ap.add_argument("--stages", nargs="+", choices=[s.key for s in STAGES],
                     default=[s.key for s in STAGES])
     ap.add_argument("--screening", choices=["none", "skynet"], default="none")
-    ap.add_argument("--rtol", type=float, default=1.0e-6)
-    ap.add_argument("--atol", type=float, default=1.0e-20)
+    ap.add_argument("--solver", choices=["implicit-euler", "bdf"], default="implicit-euler")
+    ap.add_argument("--max-change", type=float, default=0.02,
+                    help="implicit Euler: largest fractional change of an abundance per step")
+    ap.add_argument("--x-min", type=float, default=1.0e-15,
+                    help="implicit Euler: mass fraction below which an abundance does "
+                         "not limit the step")
+    ap.add_argument("--rtol", type=float, default=1.0e-6, help="BDF only")
+    ap.add_argument("--atol", type=float, default=1.0e-20, help="BDF only")
     ap.add_argument("--points", type=int, default=300,
                     help="output times per stage, besides t = 0")
     ap.add_argument("--tag", default="", help="suffix for the output directory")
+    ap.add_argument("--silicon-unit", choices=["d", "yr"], default="d",
+                    help="unit of the 0.733 duration of silicon burning")
+    ap.add_argument("--from-results", type=Path, default=None,
+                    help="results directory holding the stage before the first one run")
     args = ap.parse_args()
 
     outdir = RESULTS if not args.tag else RESULTS.parent / f"results_{args.tag}"
     outdir.mkdir(parents=True, exist_ok=True)
+    stages = {s.key: s for s in STAGES}
+    if args.silicon_unit != "d":
+        from dataclasses import replace
+        stages["silicon"] = replace(stages["silicon"], unit=args.silicon_unit)
     summary_path = outdir / "run_summary.json"
     summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
 
@@ -164,15 +200,19 @@ def main() -> int:
     if first == 0:
         abundances = {k: v / net.species[k].a for k, v in load_composition().items()}
     else:
-        previous = np.load(outdir / f"{order[first - 1]}.npz")
-        abundances = dict(zip(previous["species"], previous["final_y"]))
+        source = args.from_results or outdir
+        previous = np.load(source / f"{order[first - 1]}.npz")
+        abundances = dict(zip(previous["final_species"], previous["final_y"]))
 
     import nucnetpy
     import scipy
     summary["settings"] = {
-        "screening": args.screening, "rtol": args.rtol, "atol": args.atol,
+        "solver": args.solver, "screening": args.screening,
+        **({"rtol": args.rtol, "atol": args.atol} if args.solver == "bdf" else
+           {"max_change": args.max_change, "x_min": args.x_min}),
         "points": args.points, "reverse_rate_factor_reassigned": reassigned,
-        "electron_captures_times_rho_ye": True,
+        "electron_captures_times_rho_ye": True, "silicon_unit": args.silicon_unit,
+        "started_from": str(args.from_results or outdir.name),
         "nucnetpy": nucnetpy.__version__, "numpy": np.__version__,
         "scipy": scipy.__version__, "python": sys.version.split()[0],
         "platform": platform.platform(),
@@ -180,7 +220,7 @@ def main() -> int:
     for key in order[first:]:
         if key not in args.stages:
             break
-        stage = STAGE_BY_KEY[key]
+        stage = stages[key]
         print(f"{stage.title}: T9 = {stage.t9}, rho = {stage.rho:g} g/cm^3, "
               f"{stage.duration} {stage.unit} ...", flush=True)
         result, keep, info, final = run_stage(net, stage, abundances, args, hook)
@@ -192,7 +232,7 @@ def main() -> int:
             final_species=names, final_y=result.y[-1])
         summary[key] = info
         summary_path.write_text(json.dumps(summary, indent=1) + "\n")
-        print(f"  done in {info['wall_seconds']} s, {info['nfev']} evaluations, "
+        print(f"  done in {info['wall_seconds']} s, "
               f"|sum X - 1| <= {info['max_abs_xsum_minus_1']:.1e}", flush=True)
         abundances = final
     return 0

@@ -5,7 +5,8 @@ burning stage, on logarithmic axes.  An open circle at the end of a stage
 marks each final mass fraction the paper quotes in its text, so the two
 calculations can be compared by eye.  Figs. 7 and 8 show 26Al, 27Al and
 their ratio during the four advanced stages, against linear time, as in the
-paper.  The figures are written to ``figures/``.
+paper.  A ninth figure, not in the paper, sets every final mass fraction the
+paper quotes beside NucNetPy's.  The figures are written to ``figures/``.
 
     python make_figures.py
     python make_figures.py --results results_screened --outdir figures_screened
@@ -204,6 +205,58 @@ def figure8(results: Path, outdir: Path):
     return path
 
 
+def final_mass_fractions(results: Path, key: str):
+    d = np.load(results / f"{key}.npz")
+    return {str(s): float(y) * mass_number(str(s))
+            for s, y in zip(d["final_species"], d["final_y"])}
+
+
+def comparison_figure(results: Path, outdir: Path):
+    """Every final mass fraction the paper quotes, beside NucNetPy's value."""
+    from common import ILIADIS_FINAL
+    stages = [s for s in STAGES if (results / f"{s.key}.npz").exists()]
+    fig, axes = plt.subplots(2, 3, figsize=(10.4, 6.6))
+    fig.patch.set_facecolor(SURFACE)
+    marks = {"NucNetPy": dict(marker="o", ms=7, mfc=PALETTE[0], mec=SURFACE, mew=1.2,
+                              color=PALETTE[0]),
+             "Paper": dict(marker="o", ms=8, mfc="none", mec=PALETTE[1], mew=1.6,
+                           color=PALETTE[1]),
+             "Iliadis (2015), as quoted": dict(marker="D", ms=6, mfc="none",
+                                               mec=PALETTE[2], mew=1.5,
+                                               color=PALETTE[2])}
+    for ax, stage in zip(axes.flat, stages):
+        style(ax)
+        ours = final_mass_fractions(results, stage.key)
+        names = list(PAPER_FINAL.get(stage.key, {}))
+        names += [n for n in ILIADIS_FINAL.get(stage.key, {}) if n not in names]
+        for row, name in enumerate(names):
+            ax.plot([ours.get(name, 0.0)], [row], ls="none", **marks["NucNetPy"],
+                    zorder=4)
+            if name in PAPER_FINAL.get(stage.key, {}):
+                ax.plot([PAPER_FINAL[stage.key][name]], [row], ls="none",
+                        **marks["Paper"], zorder=3)
+            if name in ILIADIS_FINAL.get(stage.key, {}):
+                ax.plot([ILIADIS_FINAL[stage.key][name]], [row], ls="none",
+                        **marks["Iliadis (2015), as quoted"], zorder=3)
+        ax.set_yticks(range(len(names)), [nuclide_label(n) for n in names])
+        ax.set_ylim(len(names) - 0.4, -0.6)
+        ax.set_xscale("log")
+        ax.set_xlim(1e-5, 2.0)
+        ax.grid(True, axis="y", color=GRID, linewidth=0.6)
+        ax.set_title(stage.title, loc="left", fontsize=10, color=INK)
+        ax.set_xlabel("Final mass fraction")
+    handles = [Line2D([], [], ls="none", label=k, **v) for k, v in marks.items()]
+    fig.legend(handles=handles, loc="upper right", ncol=3, frameon=False, fontsize=9.5,
+               labelcolor=INK)
+    fig.suptitle("Final mass fractions quoted by the paper, beside NucNetPy's",
+                 x=0.01, ha="left", fontsize=11, color=INK)
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    path = outdir / "fig9_comparison.png"
+    fig.savefig(path, dpi=200, facecolor=SURFACE)
+    plt.close(fig)
+    return path
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -218,6 +271,8 @@ def main() -> int:
     if all((args.results / f"{k}.npz").exists() for k in ADVANCED):
         print("wrote", figure7(args.results, args.outdir).name)
         print("wrote", figure8(args.results, args.outdir).name)
+    if all((args.results / f"{s.key}.npz").exists() for s in STAGES):
+        print("wrote", comparison_figure(args.results, args.outdir).name)
     return 0
 
 

@@ -54,10 +54,14 @@ present-day photospheric totals that the paper quotes (X = 0.7491, Y = 0.2377,
 Z = 0.0133). Those totals add up to 1.0001 because of rounding, so the whole
 composition is then divided by 1.0001.
 
-**Integration.** `nucnetpy.evolve_zone` with SciPy's BDF method and NucNetPy's
-analytic Jacobian, a relative tolerance of 10⁻⁶ and an absolute tolerance of
-10⁻²⁰ on the abundances. Results are recorded at 300 times per stage, spaced
-evenly in the logarithm of time from the start of the paper's time axis.
+**Integration.** Implicit (backward) Euler steps solved by Newton–Raphson
+iterations, the scheme NucNet Tools uses, built in `stepper.py` from
+NucNetPy's own right-hand side and analytic Jacobian. Each step is sized so
+that no mass fraction above 10⁻¹⁵ changes by more than about 2 per cent. The
+next section explains why NucNetPy's own integrator, `evolve_zone`, could not
+be used. Results are recorded at 300 times per stage, spaced evenly in the
+logarithm of time from the start of the paper's time axis. A second run with
+steps twice as large (`results_coarse/`) shows how much the step size matters.
 
 **Screening.** The paper does not mention electron screening, so the main
 calculation leaves it out. A second run with NucNetPy's SkyNet screening is in
@@ -82,6 +86,32 @@ The network and the initial composition are stored in `data/`, so the
 calculation needs nothing but NucNetPy. `build_inputs.py` regenerates them; it
 needs pynucastro 3.2.0 and the file `sollo03.dat` from StarFit 0.19.1 (see the
 instructions at the top of that script).
+
+## Why the stages are not integrated with `evolve_zone`
+
+`nucnetpy.evolve_zone` passes the network to SciPy's BDF integrator, and
+NucNetPy's right-hand side sets any negative abundance to zero before using
+it. On this 891-nuclide network that combination fails in the very first
+stage. As hydrogen runs out, the higher-order BDF formula predicts a slightly
+negative hydrogen abundance, the right-hand side treats it as zero and stops
+every proton capture, and the step size collapses. With an absolute tolerance
+of 10⁻²⁰ the integration took more than two hours to pass 1.8 of the 6.7 Myr
+and then stopped, the clipping having created 2.5 × 10⁻³ of the baryon number.
+With 10⁻¹⁸, and again with screening, it stalled or failed earlier.
+
+Two simple changes to NucNetPy were tried and rejected. Without the clipping,
+hydrogen and helium burning took about six minutes each, but carbon burning
+failed with the same collapse of the step size, probably because two small
+negative abundances make a positive flow between them, which feeds itself.
+With a Jacobian that agrees with the clipping, the integration got as far as
+neon burning (its hydrogen-burning result agreed with the unclipped run to
+1.5 × 10⁻⁴) and then failed in oxygen burning, after small negative
+abundances had built up to 10⁻⁵ of the baryon number.
+
+Implicit Euler does not have this problem. For a decaying abundance it takes
+y → y/(1 + λΔt), which can never turn negative, and that is why NucNet Tools
+uses it. Its price is first-order accuracy, so the steps must stay small; the
+whole calculation takes a few hours in pure Python.
 
 ## Two things NucNetPy does not do yet
 
@@ -112,6 +142,7 @@ NucNetPy.
 |---|---|
 | `common.py` | The six stages, the species in each figure, the values the paper quotes, and the electron-capture factor |
 | `build_inputs.py` | Builds the network and the initial composition in `data/` |
+| `stepper.py` | Implicit Euler steps with Newton–Raphson iterations, built from NucNetPy's right-hand side and Jacobian |
 | `run_stages.py` | Runs the six stages with NucNetPy |
 | `summarise.py` | Compares the results with the paper's values |
 | `make_figures.py` | Redraws Figs. 1–8 |
