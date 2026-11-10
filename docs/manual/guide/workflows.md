@@ -61,9 +61,24 @@ assert result.success, result.message
 temperature and density history drops straight in;
 `nucnetpy.hydro.Trajectory` wraps a tabulated one with interpolation.
 
-Supported methods are `bdf`, `radau`, `lsoda`, `rk45` and `dop853`, plus
-fixed-step `rk4`, `euler` and `implicit_euler` fallbacks. Reaction networks are
-stiff, so the first three are the practical choices.
+Supported methods are `bdf`, `radau`, `lsoda`, `rk45` and `dop853`, which
+call SciPy; `adaptive_implicit_euler`; and the fixed-step `rk4`, `euler` and
+`implicit_euler` fallbacks. Reaction networks are stiff, so `bdf`, `radau`,
+`lsoda` and `adaptive_implicit_euler` are the practical choices.
+
+`adaptive_implicit_euler` is the scheme of NucNet Tools: implicit Euler steps
+solved by Newton–Raphson iterations, each sized so that no abundance whose mass
+fraction exceeds `min_mass_fraction` (10⁻¹⁵) changes by more than `max_change`
+(0.5 per cent). It is first-order accurate, so it takes more steps than BDF for
+the same accuracy. But it cannot turn a decaying abundance negative, so it
+keeps working where BDF fails as a fuel runs out in a large network (see
+{doc}`pitfalls`):
+
+```python
+result = nn.evolve_zone(net, zone, times, thermo=thermo,
+                        method="adaptive_implicit_euler", max_change=0.005)
+print(result.steps, result.rejected_steps)
+```
 
 ### Choosing the Jacobian
 

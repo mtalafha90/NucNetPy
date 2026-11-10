@@ -1,7 +1,7 @@
 """nucnetpy: pure-Python replacement layer for NucNet Tools workflows."""
 from .species import Species, species_from_za, normalize_species_name
 from .core import Network, Zone
-from .reactions import Reaction, ReactionParticipant, ReactionNetwork, RateFit, TabularRate, read_reaclib_text
+from .reactions import Reaction, ReactionParticipant, ReactionNetwork, RateFit, TabularRate, read_reaclib_text, electron_fraction
 from .solver import evolve_zone, evolve_network_zones, constant_thermo, time_grid, EvolutionResult, jacobian, analytic_jacobian, jacobian_sparsity
 from .io.xml import read_xml, write_xml, read_network_xml, write_zone_xml, read_xml_string
 from .io.jina import read_jina_xml, combine_jina_xml, jina_database_summary

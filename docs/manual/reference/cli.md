@@ -320,7 +320,7 @@ options:
 ```
 usage: nucnetpy evolve-zone [-h] [--zone-index ZONE_INDEX] [--t0 T0] [--t1 T1]
                             [--steps STEPS] [--t9 T9] [--rho RHO]
-                            [--method {bdf,radau,lsoda,rk45,dop853,rk4,euler,implicit_euler,backward_euler}]
+                            [--method {bdf,radau,lsoda,rk45,dop853,adaptive_implicit_euler,rk4,euler,implicit_euler,backward_euler}]
                             [--log-time] [--min-abundance MIN_ABUNDANCE]
                             xml
 
@@ -335,7 +335,7 @@ options:
   --steps STEPS
   --t9 T9
   --rho RHO
-  --method {bdf,radau,lsoda,rk45,dop853,rk4,euler,implicit_euler,backward_euler}
+  --method {bdf,radau,lsoda,rk45,dop853,adaptive_implicit_euler,rk4,euler,implicit_euler,backward_euler}
   --log-time
   --min-abundance MIN_ABUNDANCE
 ```

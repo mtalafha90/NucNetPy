@@ -87,17 +87,52 @@ def _q_value(reaction: Reaction, species_map: Mapping[str, Species],
     return total
 
 
+def _reaclib_reverse_flag(reaction: Reaction) -> Optional[bool]:
+    """ReacLib's ``v`` (derived reverse) flag, read from the fit labels.
+
+    ReacLib labels each set with four characters, a resonance flag and the
+    ``v`` flag, and a label kept whole (``"ls09rv"``, ``"rath v"``) ends in
+    ``v`` exactly when the set is a derived reverse rate.  Returns ``True`` if
+    every fit is so flagged, ``False`` if none is, and ``None`` if the labels
+    are missing or disagree.
+    """
+    labels = [str(fit.label or "").strip() for fit in reaction.rate_fits]
+    if not labels or not all(labels):
+        return None
+    flagged = [label.endswith("v") for label in labels]
+    if all(flagged):
+        return True
+    if not any(flagged):
+        return False
+    return None
+
+
 def _is_library_reverse(candidate: Reaction, partner: Reaction,
                         rtol: float) -> bool:
     """True if every fit of ``candidate`` is ReacLib's reverse of a fit of ``partner``.
 
     ReacLib derives a reverse rate from its forward rate by detailed balance:
-    the conversion keeps a2..a5, lowers a1 by 11.6045 Q (Q > 0 for the forward
-    reaction), raises a6 by 3/2 times the change in the number of nuclear
-    particles, and shifts a0 by the logarithm of the spin and mass factors.
-    That signature identifies a derived reverse rate without the ``v`` flag,
-    which libnucnet files do not carry.  An independently fitted reverse rate
-    does not share a2..a5 with its forward rate and is left alone.
+    the conversion keeps a2..a5, lowers a1 by 11.6045 Q (Q > 0 for an
+    exothermic forward reaction), raises a6 by 3/2 times the change in the
+    number of nuclear particles, and shifts a0 by the logarithm of the spin
+    and mass factors.  That signature pairs a forward fit with its derived
+    reverse.  An independently fitted reverse rate does not share a2..a5 with
+    its forward rate and is left alone.
+
+    The signature is the same in both directions, so it does not say which
+    member of the pair is the derived one.  That is decided by, in order:
+
+    1. ReacLib's ``v`` flag, when the fit labels carry it for exactly one
+       member (see :func:`_reaclib_reverse_flag`);
+    2. otherwise, for a capture and its photodisintegration, the
+       photodisintegration: ReacLib always fits the capture and derives the
+       photodisintegration, even when the capture is endothermic because its
+       product is unbound;
+    3. otherwise the endothermic member, the one with the lower a1.
+
+    The third rule alone used to decide; in the ReacLib snapshot of
+    29 March 2022 it picked the wrong member of 1,862 of 32,676 pairs, nearly
+    all captures into nuclei beyond the drip lines.
     """
     if not candidate.rate_fits or not partner.rate_fits:
         return False
@@ -121,8 +156,12 @@ def _is_library_reverse(candidate: Reaction, partner: Reaction,
     part = [list(fit.coefficients) for fit in partner.rate_fits]
 
     def compatible(c, f) -> bool:
+        # a6 is compared relative to its size: the library rounds its
+        # coefficients to six or seven significant figures, which for an a6
+        # near 100 leaves the 3/2 shift uncertain by a few times 1e-4.
         return (np.allclose(c[2:6], f[2:6], rtol=rtol, atol=1e-8)
-                and abs((c[6] - f[6]) - a6_shift) <= 1e-4)
+                and abs((c[6] - f[6]) - a6_shift)
+                <= 1e-4 * max(1.0, abs(c[6]), abs(f[6])))
 
     # Every set shares one a1 shift, -11.6045 Q.  The sets need not be stored
     # in the same order in the two records, and sets with a2..a5 = 0 match each
@@ -141,10 +180,24 @@ def _is_library_reverse(candidate: Reaction, partner: Reaction,
                 break
             unused.remove(match)
         else:
-            # The reverse of an exothermic forward rate is the member with the
-            # lower a1.
-            return a1_shift < -1e-6
+            return _derived_member_is(candidate, partner, a1_shift, nuclear_count)
     return False
+
+
+def _derived_member_is(candidate: Reaction, partner: Reaction, a1_shift: float,
+                       nuclear_count) -> bool:
+    """Decide whether ``candidate`` is the derived member of a ReacLib pair.
+
+    See :func:`_is_library_reverse` for the order of the rules.
+    """
+    flag_c, flag_p = _reaclib_reverse_flag(candidate), _reaclib_reverse_flag(partner)
+    if flag_c is not None and flag_p is not None and flag_c != flag_p:
+        return flag_c
+    one_c = nuclear_count(candidate.reactants) == 1
+    one_p = nuclear_count(partner.reactants) == 1
+    if one_c != one_p:
+        return one_c
+    return a1_shift < -1e-6
 
 
 def _partition_table(species_map: Mapping[str, Species], name: str):

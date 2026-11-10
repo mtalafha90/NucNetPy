@@ -34,8 +34,10 @@ which routines were written by working from named C++ source files.
 - **Reactions** — ReacLib seven-parameter rates, tabular and constant rates,
   statistical factors, stoichiometry, reaction flows, and A/Z conservation
   checks.
-- **Evolution** — one-zone and multi-zone integration with SciPy BDF/Radau/LSODA
-  (plus fixed-step RK4 / implicit Euler fallbacks), an **analytic Jacobian** of
+- **Evolution** — one-zone and multi-zone integration with SciPy BDF/Radau/LSODA,
+  NucNet Tools' adaptive implicit Euler scheme (`method="adaptive_implicit_euler"`,
+  robust where a fuel runs out in a large network), fixed-step RK4 / implicit
+  Euler fallbacks, an **analytic Jacobian** of
   the reaction flows (one sweep over the reaction list instead of `N+1`
   right-hand-side evaluations — over 100x faster at 100 species), positivity
   projection, and screening / weak-rate hooks. Choose the Jacobian with
@@ -50,8 +52,9 @@ which routines were written by working from named C++ source files.
   Tools C++ source.
 - **Reverse rates with partition functions** — ReacLib fits its reverse rates
   with the ground-state spins only and leaves the partition-function ratio to
-  the user. The XML readers recognise those rates from their coefficients and
-  apply the ratio (`apply_reverse_partition_functions()`). Without it the alpha
+  the user. The XML readers recognise those rates from their coefficients
+  (and from ReacLib's `v` flag when the fit labels carry it) and apply the
+  ratio (`apply_reverse_partition_functions()`). Without it the alpha
   chain at T9=5 relaxed to a composition 4.5% (median) and up to 48% away from
   NSE; with it the network matches `solve_nse` to 0.34% (median).
 - **Thermodynamic consistency** — `consistent_reverse_network()` rebuilds every

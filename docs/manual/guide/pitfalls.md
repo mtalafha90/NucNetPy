@@ -41,14 +41,54 @@ before the fix did exactly that; the comparison with `solve_nse` is what
 exposed it.
 
 The XML readers now recognise the derived reverse rates from their coefficients,
-because libnucnet files do not carry ReacLib's `v` flag, and apply the ratio:
-the alpha chain then matches NSE to a median 0.34 per cent. For a network built
-in memory, call `apply_reverse_partition_functions(net)` yourself.
+because libnucnet files do not usually carry ReacLib's `v` flag, and apply the
+ratio: the alpha chain then matches NSE to a median 0.34 per cent. For a
+network built in memory, call `apply_reverse_partition_functions(net)` yourself.
+
+The coefficients show which two rates form a pair, but not which of the two was
+derived. The reader takes ReacLib's `v` flag from the fit labels when they carry
+it. Otherwise it takes the photodisintegration of a capture/photodisintegration
+pair, and the endothermic member of any other pair. Choosing the endothermic
+member everywhere, as NucNetPy 1.0.0 did, put the factor on the wrong rate in
+1,862 of the 32,676 pairs of the ReacLib snapshot of 29 March 2022. Those are
+captures into nuclei beyond the drip lines, which are endothermic, yet ReacLib
+still fits the capture and derives the photodisintegration. Eighteen two-body
+pairs in that snapshot can be told apart only by the flag. Write the labels
+with the flag (for example `ls09rv`) if you build a libnucnet file from ReacLib
+yourself.
 
 What is left comes from the library's Q values and the accuracy of its fits.
 Use `consistent_reverse_network` if you need the network and the equilibrium
 solver to agree exactly, and understand that you are then trusting the nuclide
 file's masses over the library's Q values.
+
+## Electron captures without the electron density
+
+ReacLib fits its three electron captures (on ³He and ⁷Be, and the pep
+reaction p + p + e⁻) per unit electron density, ρYe. Treated like a
+photodisintegration, whose rate already contains the photon density, they run
+too slowly by that factor: by about 3 in the core of a massive star on the
+main sequence, and by about 100 in the Sun. NucNetPy multiplies the ReacLib
+fits of a reaction by ρYe once for each electron among its reactants.
+`Reaction.rate` and `ReactionNetwork.rates` need `ye` for that. `Reaction.flux`,
+`ReactionNetwork.flows`, `ReactionNetwork.ydot` and the network's right-hand
+side work it out from the abundances. NucNetPy 1.0.0 left the factor out.
+
+## Running out of fuel with BDF
+
+As a fuel runs out, the higher-order BDF formula can predict a slightly
+negative abundance for it. The right-hand side treats a negative abundance as
+zero, which switches off every reaction that consumes the fuel, and SciPy's
+step size then collapses. On an 891-nuclide network from hydrogen to nickel this
+stopped hydrogen burning soon after 1.8 of its 6.7 Myr. Neither removing the clipping
+nor making the Jacobian agree with it cured the failure: each let the
+integration go further and then fail in a later burning stage.
+
+`method="adaptive_implicit_euler"` avoids the problem. It takes implicit Euler
+steps, which cannot turn a decaying abundance negative, as NucNet Tools does,
+and sizes each step so that no abundance changes by more than `max_change`
+(0.5 per cent by default). It is first-order accurate: halving `max_change`
+halves the error. Use it when a large network runs a fuel down.
 
 ## Placeholder nuclear data in an equilibrium solve
 
