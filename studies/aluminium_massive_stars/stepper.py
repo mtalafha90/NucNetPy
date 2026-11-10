@@ -18,8 +18,9 @@ screening and flow formula are all NucNetPy's.
 
 Each step solves ``y - y_old - dt * f(y) = 0`` for the new abundances ``y``
 by Newton iterations with the matrix ``I - dt * J``.  The Jacobian ``J`` is
-kept for up to ``jac_every`` steps and recomputed sooner if the iterations
-slow down.  A step is accepted when the iterations converge and no abundance
+kept for up to ``jac_every`` steps, and the factorised matrix while the step
+changes by less than 30 per cent; both are recomputed sooner if the
+iterations slow down.  A step is accepted when the iterations converge and no abundance
 whose mass fraction was above ``x_min`` changes by more than
 ``2 * max_change``; the next step is then sized to aim at ``max_change``.
 Steps also end exactly on the requested output times.
@@ -58,24 +59,39 @@ class StepperResult:
 
 
 def evolve(network, abundances, times: Sequence[float], t9: float, rho: float,
-           screening=None, max_change: float = 0.02, x_min: float = 1.0e-15,
+           screening=None, max_change: float = 0.005, x_min: float = 1.0e-15,
            newton_tol: float = 1.0e-7, max_newton: int = 12, jac_every: int = 4,
            first_step: Optional[float] = None, max_growth: float = 1.5,
+           fast: bool = True, project: bool = True,
            progress: Optional[Callable[[float, int], None]] = None) -> StepperResult:
     """Integrate one zone at constant ``t9`` and ``rho`` over ``times``.
 
     ``abundances`` maps species names to abundances Y (mass fraction divided
     by mass number).  ``times`` must start at the initial time and increase.
     The first step defaults to a thousandth of the first output interval.
+    ``screening`` is the rate hook (``common.RateFactors``).  With ``fast``
+    (the default) the right-hand side and Jacobian are evaluated by
+    :class:`fastnet.FrozenNetwork`, which reproduces NucNetPy's functions to
+    round-off a hundred times faster; ``fast=False`` calls
+    ``nucnetpy.solver.rhs`` and ``analytic_jacobian`` themselves.
     """
     species = [s for s in network.species_names() if not is_massless(s)]
     a = np.array([network.species[s].a for s in species], dtype=float)
     y = np.array([float(abundances.get(s, 0.0)) for s in species])
-    thermo = lambda t, ab: (float(t9), float(rho))  # noqa: E731
-    f = rhs(network, species, thermo, screening=screening)
-    jac = analytic_jacobian(network, species, thermo, screening=screening, sparse=True)
+    if fast:
+        from fastnet import FrozenNetwork
+        model = FrozenNetwork(network, species, t9, rho, screening)
+        f = lambda t, yy: model.rhs(yy)          # noqa: E731
+        jac = lambda t, yy: model.jacobian(yy)   # noqa: E731
+    else:
+        thermo = lambda t, ab: (float(t9), float(rho))  # noqa: E731
+        f = rhs(network, species, thermo, screening=screening)
+        jac = analytic_jacobian(network, species, thermo, screening=screening, sparse=True)
     eye = identity(len(species), format="csc")
     y_min = x_min / a            # abundance threshold for the step control
+
+    def factor(matrix, step):
+        return splu((eye - step * matrix).tocsc(), permc_spec="MMD_AT_PLUS_A")
 
     times = np.asarray(times, dtype=float)
     out = np.zeros((len(times), len(species)))
@@ -85,6 +101,7 @@ def evolve(network, abundances, times: Sequence[float], t9: float, rho: float,
     steps = rejected = nfev = njev = 0
     worst_negative = 0.0
     jm, jm_age = None, 0
+    lu, lu_h = None, None
     k = 1
     while k < len(times):
         target = times[k]
@@ -92,8 +109,12 @@ def evolve(network, abundances, times: Sequence[float], t9: float, rho: float,
         if jm is None or jm_age >= jac_every:
             jm, jm_age = jac(t + h, y), 0
             njev += 1
-        fresh = jm_age == 0
-        lu = splu((eye - h * jm).tocsc())
+            lu = None
+        # The factorised matrix is reused while the step changes by less than
+        # 30 per cent; the Newton iterations then converge a little slower.
+        if lu is None or abs(h / lu_h - 1.0) > 0.3:
+            lu, lu_h = factor(jm, h), h
+        fresh = jm_age == 0 and lu_h == h
         ynew = y.copy()
         converged = False
         for it in range(max_newton):
@@ -101,20 +122,25 @@ def evolve(network, abundances, times: Sequence[float], t9: float, rho: float,
             nfev += 1
             delta = lu.solve(-g)
             ynew = ynew + delta
+            if project:
+                # NucNetPy's right-hand side treats a negative abundance as
+                # zero, so an iterate that dips below zero only makes the
+                # iterations chatter about zero.  The implicit Euler solution
+                # itself is never negative, so the iterates are kept at or
+                # above zero.
+                np.maximum(ynew, 0.0, out=ynew)
             if np.max(np.abs(delta) / (np.abs(ynew) + y_min)) < newton_tol:
                 converged = True
                 break
-            if it == 3 and not fresh:
-                # Slow convergence with an old Jacobian: refresh it.
+            if it % 3 == 2:
+                # Slow convergence: refresh the Jacobian at the current
+                # iterate, and the factorised matrix with it.
                 jm, jm_age, fresh = jac(t + h, np.clip(ynew, 0.0, None)), 0, True
                 njev += 1
-                lu = splu((eye - h * jm).tocsc())
+                lu, lu_h = factor(jm, h), h
         if not converged or not np.all(np.isfinite(ynew)):
             rejected += 1
-            if not fresh:
-                jm = None                 # retry the same step with a new Jacobian
-                continue
-            dt = 0.25 * h
+            dt = 0.5 * h
             if dt < 1e-30 * max(1.0, t):
                 return StepperResult(times[:k], species, out[:k], False,
                                      f"step size underflow at t = {t:.6e} s",

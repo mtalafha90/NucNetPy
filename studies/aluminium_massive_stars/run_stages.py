@@ -16,9 +16,10 @@ species names and abundances on a logarithmic time grid) and adds the stage's
 diagnostics to ``results/run_summary.json``.
 
     python run_stages.py                        # all six stages
-    python run_stages.py --stages neon oxygen   # resume from saved stages
+    python run_stages.py --stages neon oxygen   # start from a saved stage
+    python run_stages.py --resume               # carry on after an interruption
     python run_stages.py --screening skynet --tag screened
-    python run_stages.py --max-change 0.01 --tag half_steps
+    python run_stages.py --max-change 0.01 --tag check
     python run_stages.py --stages silicon --silicon-unit yr --tag silicon_year \\
         --from-results results
 
@@ -160,7 +161,7 @@ def main() -> int:
                     default=[s.key for s in STAGES])
     ap.add_argument("--screening", choices=["none", "skynet"], default="none")
     ap.add_argument("--solver", choices=["implicit-euler", "bdf"], default="implicit-euler")
-    ap.add_argument("--max-change", type=float, default=0.02,
+    ap.add_argument("--max-change", type=float, default=0.005,
                     help="implicit Euler: largest fractional change of an abundance per step")
     ap.add_argument("--x-min", type=float, default=1.0e-15,
                     help="implicit Euler: mass fraction below which an abundance does "
@@ -174,6 +175,8 @@ def main() -> int:
                     help="unit of the 0.733 duration of silicon burning")
     ap.add_argument("--from-results", type=Path, default=None,
                     help="results directory holding the stage before the first one run")
+    ap.add_argument("--resume", action="store_true",
+                    help="skip the stages already saved in the output directory")
     args = ap.parse_args()
 
     outdir = RESULTS if not args.tag else RESULTS.parent / f"results_{args.tag}"
@@ -196,6 +199,11 @@ def main() -> int:
     hook = RateFactors(screening)
 
     order = [s.key for s in STAGES]
+    if args.resume:
+        args.stages = [k for k in args.stages if not (outdir / f"{k}.npz").exists()]
+        if not args.stages:
+            print("every stage is already saved", flush=True)
+            return 0
     first = order.index(args.stages[0])
     if first == 0:
         abundances = {k: v / net.species[k].a for k, v in load_composition().items()}
