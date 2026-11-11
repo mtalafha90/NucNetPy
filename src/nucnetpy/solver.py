@@ -26,11 +26,14 @@ _SCIPY_METHODS = {
     "rk45": "RK45",
     "dop853": "DOP853",
 }
+#: Implicit Euler with its own step control, the scheme of NucNet Tools; see
+#: :func:`evolve_zone`.
+_ADAPTIVE_METHODS = ("adaptive_implicit_euler",)
 #: Fixed-step integrators implemented here.  They take one step per interval
 #: of the time grid, so the grid itself sets the accuracy.
 _FIXED_STEP_METHODS = ("rk4", "euler", "implicit_euler", "backward_euler")
 #: Every method name accepted by :func:`evolve_zone` (case-insensitive).
-METHODS = tuple(_SCIPY_METHODS) + _FIXED_STEP_METHODS
+METHODS = tuple(_SCIPY_METHODS) + _ADAPTIVE_METHODS + _FIXED_STEP_METHODS
 _JAC_MODES = ("analytic", "numerical", "sparsity")
 
 
@@ -57,6 +60,9 @@ class EvolutionResult:
     message: str = ""
     nfev: int = 0
     njev: int = 0
+    #: Accepted and rejected steps; counted by ``adaptive_implicit_euler`` only.
+    steps: int = 0
+    rejected_steps: int = 0
 
     @property
     def final_abundances(self) -> Dict[str, float]:
@@ -238,8 +244,21 @@ def jacobian_sparsity(network: Network, species: Sequence[str]):
         return mat
 
 
-def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Optional[ThermoFunction] = None, method: str = "bdf", species: Optional[Sequence[str]] = None, screening: Optional[ScreeningFunction] = None, weak_rates: Optional[Sequence[object]] = None, rtol: float = 1e-6, atol: float = 1e-30, use_jacobian: bool = True, project_positive: bool = True, jac_mode: str = "analytic") -> EvolutionResult:
+def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Optional[ThermoFunction] = None, method: str = "bdf", species: Optional[Sequence[str]] = None, screening: Optional[ScreeningFunction] = None, weak_rates: Optional[Sequence[object]] = None, rtol: float = 1e-6, atol: float = 1e-30, use_jacobian: bool = True, project_positive: bool = True, jac_mode: str = "analytic", max_change: float = 0.005, min_mass_fraction: float = 1e-15) -> EvolutionResult:
     """Evolve one zone over ``times``.
+
+    ``method="adaptive_implicit_euler"`` takes implicit (backward) Euler steps
+    solved by Newton-Raphson iterations, the scheme NucNet Tools uses, and
+    chooses each step so that no abundance whose mass fraction exceeds
+    ``min_mass_fraction`` changes by more than ``max_change`` (as a fraction)
+    in one step.  It is first-order accurate, so ``max_change`` sets the
+    accuracy: halving it halves the error.  It is the robust choice for large
+    networks in which a fuel runs out.  There the higher-order BDF formula
+    can predict a slightly negative abundance of the fuel; the right-hand
+    side treats it as zero, which stops every reaction that consumes the
+    fuel, and SciPy's step size collapses.  Implicit Euler cannot turn a
+    decaying abundance negative.  ``rtol``, ``atol``, ``use_jacobian`` and
+    ``jac_mode`` do not apply to it.
 
     ``jac_mode`` selects how the Jacobian is supplied to the implicit SciPy
     solvers.  ``"analytic"`` (the default) uses :func:`analytic_jacobian`, which
@@ -270,6 +289,9 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
     species = [s for s in species if not is_massless(s)]
     y0 = np.array([zone.get_abundance(s) for s in species], dtype=float)
     thermo = thermo or zone_thermo(zone)
+    if method_l in _ADAPTIVE_METHODS:
+        return _adaptive_implicit_euler(network, species, y0, ts, thermo, screening,
+                                        weak_rates, max_change, min_mass_fraction)
     f = rhs(network, species, thermo, screening=screening, weak_rates=weak_rates)
     if method_l in _SCIPY_METHODS:
         try:
@@ -315,6 +337,122 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
     ok = bool(np.all(np.isfinite(res)))
     msg = f"fixed-step {method_l}" + ("" if ok else " diverged (non-finite abundances)")
     return EvolutionResult(ts, species, res, ok, msg)
+
+
+def _adaptive_implicit_euler(network: Network, species: Sequence[str], y0: np.ndarray,
+                             ts: np.ndarray, thermo: ThermoFunction, screening,
+                             weak_rates, max_change: float, min_mass_fraction: float,
+                             newton_tol: float = 1e-7, max_newton: int = 12,
+                             jac_every: int = 4, max_growth: float = 1.5,
+                             max_rejections: int = 200) -> EvolutionResult:
+    """Implicit Euler steps with Newton-Raphson iterations and step control.
+
+    Each step solves ``y - y_old - h f(t + h, y) = 0`` by Newton iterations
+    with the matrix ``I - h J``.  The Jacobian is kept for up to ``jac_every``
+    steps and the factorised matrix while the step changes by less than 30
+    per cent; both are recomputed at the current iterate every third
+    iteration while the iterations converge slowly.  The right-hand side
+    treats a negative abundance as zero, so an iterate that dips below zero
+    would make the iterations chatter about zero; since the implicit Euler
+    solution is itself never negative, the iterates are kept at or above zero.
+
+    A step is accepted when the iterations converge and no abundance whose
+    mass fraction was above ``min_mass_fraction`` changed by more than twice
+    ``max_change``; the next step then aims at ``max_change``, growing by at
+    most ``max_growth``.  Only abundances already above the threshold limit
+    the step, as in NucNet Tools: one just being made from nothing would
+    otherwise count as a 100 per cent change.  Steps end exactly on ``ts``.
+    """
+    from scipy.sparse import identity
+    from scipy.sparse.linalg import splu
+    from .species import Species
+
+    if not 0.0 < float(max_change) < 1.0:
+        raise ValueError(f"max_change must lie between 0 and 1, not {max_change!r}")
+    if float(min_mass_fraction) < 0.0:
+        raise ValueError("min_mass_fraction must not be negative")
+    if np.any(np.diff(ts) <= 0.0):
+        raise ValueError("times must increase strictly for adaptive_implicit_euler")
+    f = rhs(network, species, thermo, screening=screening, weak_rates=weak_rates)
+    jac = analytic_jacobian(network, species, thermo, screening=screening,
+                            weak_rates=weak_rates, sparse=True)
+    mass = np.array([(network.species.get(s) or Species.parse(s)).a for s in species],
+                    dtype=float)
+    y_min = float(min_mass_fraction) / np.maximum(mass, 1.0)
+    eye = identity(len(species), format="csc")
+
+    def factor(matrix, step):
+        return splu((eye - step * matrix).tocsc(), permc_spec="MMD_AT_PLUS_A")
+
+    y = np.clip(np.asarray(y0, dtype=float), 0.0, None)
+    out = np.zeros((len(ts), len(species)))
+    out[0] = y
+    t = float(ts[0])
+    dt = 1.0e-3 * float(ts[1] - ts[0])
+    steps = rejected = nfev = njev = 0
+    in_a_row = 0
+    jm, jm_age = None, 0
+    lu, lu_h = None, None
+    k = 1
+    while k < len(ts):
+        target = float(ts[k])
+        remaining = target - t
+        # A step that would stop just short of the next output time is
+        # stretched to reach it, so that no tiny leftover step remains.
+        last = dt >= remaining * (1.0 - 1e-10)
+        h = remaining if last else dt
+        if jm is None or jm_age >= jac_every:
+            jm, jm_age, lu = jac(t + h, y), 0, None
+            njev += 1
+        if lu is None or abs(h / lu_h - 1.0) > 0.3:
+            lu, lu_h = factor(jm, h), h
+        ynew = y.copy()
+        converged = False
+        for it in range(max_newton):
+            g = ynew - y - h * f(t + h, ynew)
+            nfev += 1
+            delta = lu.solve(-g)
+            ynew = ynew + delta
+            np.maximum(ynew, 0.0, out=ynew)
+            if np.max(np.abs(delta) / (np.abs(ynew) + y_min)) < newton_tol:
+                converged = True
+                break
+            if it % 3 == 2:
+                jm, jm_age = jac(t + h, ynew), 0
+                njev += 1
+                lu, lu_h = factor(jm, h), h
+        if converged and np.all(np.isfinite(ynew)):
+            big = y >= y_min
+            change = (float(np.max(np.abs(ynew[big] - y[big])
+                                   / np.maximum(y[big], ynew[big])))
+                      if np.any(big) else 0.0)
+            if change <= 2.0 * max_change:
+                t = target if last else t + h
+                y = ynew
+                steps += 1
+                jm_age += 1
+                in_a_row = 0
+                grow = max_growth if change == 0.0 else min(max_growth,
+                                                            0.9 * max_change / change)
+                proposal = h * max(grow, 0.5)
+                dt = max(proposal, dt) if h < dt else proposal
+                if last:
+                    out[k] = y
+                    k += 1
+                continue
+            dt = h * max(0.1, 0.9 * max_change / change)
+        else:
+            dt = 0.5 * h
+        rejected += 1
+        in_a_row += 1
+        if in_a_row > max_rejections or not np.isfinite(dt) or dt <= 0.0:
+            return EvolutionResult(ts[:k], list(species), out[:k], False,
+                                   f"adaptive_implicit_euler: {in_a_row} steps rejected "
+                                   f"in a row at t = {t:.6e}",
+                                   nfev, njev, steps, rejected)
+    return EvolutionResult(ts, list(species), out, True,
+                           "adaptive_implicit_euler reached the end of the interval",
+                           nfev, njev, steps, rejected)
 
 
 #: Fraction of the initial baryon number that positivity projection may create

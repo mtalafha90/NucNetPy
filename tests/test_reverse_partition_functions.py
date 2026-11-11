@@ -164,3 +164,89 @@ def test_alpha_chain_relaxes_to_nse_within_a_per_cent():
 
     assert median_offset(True) < 0.01
     assert median_offset(False) > 0.03
+
+
+# --- Which member of a pair is the derived reverse rate ---------------------
+
+#: A capture whose product is unbound, so the capture is endothermic
+#: (Q = -0.75 MeV), like 24O(n,g)25O near the neutron drip line.  ReacLib
+#: still fits the capture and derives the photodisintegration from it.
+UNBOUND_CAPTURE = [12.0, 0.0, -1.5, 0.8, -0.1, 0.01, 0.4]
+Q_UNBOUND = -0.75
+
+
+def _unbound_capture_pair(capture_label="", reverse_label=""):
+    species = {
+        "o24": Species("o24", 8, 24, 18.5, 0.0, partition={1.0: 1.0, 5.0: 1.0}),
+        "o25": Species("o25", 8, 25, 27.3, 1.5, partition={1.0: 1.0, 5.0: 1.6}),
+        "n": Species("n", 0, 1, 8.0713, 0.5),
+    }
+    capture = Reaction.from_names(["o24", "n"], ["o25", "gamma"],
+                                  rate_fits=[RateFit(UNBOUND_CAPTURE, label=capture_label)])
+    reverse = Reaction.from_names(
+        ["o25", "gamma"], ["o24", "n"],
+        rate_fits=[RateFit(_reaclib_reverse(UNBOUND_CAPTURE, Q_UNBOUND, 1.5),
+                           label=reverse_label)])
+    net = Network(species=species, reactions=ReactionNetwork([capture, reverse]))
+    return net, capture, reverse
+
+
+def test_photodisintegration_is_the_derived_member_even_when_exothermic():
+    # The photodisintegration has the higher a1 here, so the old rule (the
+    # endothermic member is the derived one) corrected the capture instead.
+    net, capture, reverse = _unbound_capture_pair()
+    assert apply_reverse_partition_functions(net) == [reverse]
+    assert capture.partition_ratio is None
+
+
+def test_reaclib_flag_decides_when_the_labels_carry_it():
+    # A two-body pair whose forward rate is the endothermic one: only the
+    # library's v flag can tell which member was derived.
+    species = {
+        "he4": Species("he4", 2, 4, 2.4249, 0.0),
+        "ne22": Species("ne22", 10, 22, -8.0247, 0.0, partition={1.0: 1.0, 5.0: 1.3}),
+        "mg25": Species("mg25", 12, 25, -13.9336, 2.5, partition={1.0: 1.0, 5.0: 1.5}),
+        "n": Species("n", 0, 1, 8.0713, 0.5),
+    }
+    forward = [20.0, -5.0, -40.0, 3.0, -0.2, 0.01, -0.67]
+    q = -0.478                                     # 22Ne(a,n)25Mg is endothermic
+    fitted = Reaction.from_names(["ne22", "he4"], ["mg25", "n"],
+                                 rate_fits=[RateFit(forward, label="ka02r")])
+    derived = Reaction.from_names(["mg25", "n"], ["ne22", "he4"],
+                                  rate_fits=[RateFit(_reaclib_reverse(forward, q, 0.0),
+                                                     label="ka02rv")])
+    net = Network(species=species, reactions=ReactionNetwork([fitted, derived]))
+    assert apply_reverse_partition_functions(net) == [derived]
+    assert fitted.partition_ratio is None
+
+
+def test_without_flags_a_two_body_pair_falls_back_to_the_endothermic_member():
+    species = {"he4": Species("he4", 2, 4, 2.4249, 0.0),
+               "ne22": Species("ne22", 10, 22, -8.0247, 0.0),
+               "mg25": Species("mg25", 12, 25, -13.9336, 2.5),
+               "n": Species("n", 0, 1, 8.0713, 0.5)}
+    forward = [20.0, -5.0, -40.0, 3.0, -0.2, 0.01, -0.67]
+    fitted = Reaction.from_names(["ne22", "he4"], ["mg25", "n"],
+                                 rate_fits=[RateFit(forward)])
+    derived = Reaction.from_names(["mg25", "n"], ["ne22", "he4"],
+                                  rate_fits=[RateFit(_reaclib_reverse(forward, -0.478, 0.0))])
+    net = Network(species=species, reactions=ReactionNetwork([fitted, derived]))
+    # With no flag and no photon the endothermic member is taken to be the
+    # derived one; here that is the fitted rate.  This is the documented limit.
+    assert apply_reverse_partition_functions(net) == [fitted]
+
+
+def test_rounded_a6_coefficients_are_still_recognised():
+    # 29Si(g,p)28Al in the 2022 ReacLib snapshot: a6 = 98.8098 for the capture
+    # and 100.31 for the derived rate, rounded from 100.3098.
+    capture_fit = [82.7866, -3.1339, 114.903, -203.401, 11.5793, -0.6728, 98.8098]
+    reverse_fit = [107.692, -146.264, 114.903, -203.401, 11.5793, -0.6728, 100.31]
+    species = {"al28": Species("al28", 13, 28, -16.85, 3.0, partition={1.0: 1.0, 5.0: 2.0}),
+               "h1": Species("h1", 1, 1, 7.289, 0.5),
+               "si29": Species("si29", 14, 29, -21.895, 0.5, partition={1.0: 1.0, 5.0: 1.1})}
+    capture = Reaction.from_names(["al28", "h1"], ["si29", "gamma"],
+                                  rate_fits=[RateFit(capture_fit)])
+    reverse = Reaction.from_names(["si29", "gamma"], ["al28", "h1"],
+                                  rate_fits=[RateFit(reverse_fit)])
+    net = Network(species=species, reactions=ReactionNetwork([capture, reverse]))
+    assert apply_reverse_partition_functions(net) == [reverse]

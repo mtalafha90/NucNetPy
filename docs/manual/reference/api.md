@@ -15,7 +15,7 @@ Pages are generated from the docstrings in the source.
 
 .. automodule:: nucnetpy.reactions
    :members: Reaction, ReactionParticipant, ReactionNetwork, RateFit,
-             TabularRate, read_reaclib_text
+             TabularRate, read_reaclib_text, electron_fraction
 ```
 
 ## Evolution
