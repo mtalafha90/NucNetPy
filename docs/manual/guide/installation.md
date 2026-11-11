@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Python 3.9 or later, with NumPy 1.22+ and SciPy 1.9+. Nothing else is required
+Python 3.10 or later, with NumPy 1.22+ and SciPy 1.9+. Nothing else is required
 to use the package.
 
 ## From a checkout

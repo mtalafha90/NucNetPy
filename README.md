@@ -113,7 +113,7 @@ Run the test suite:
 pytest -q
 ```
 
-**Requirements:** Python ≥ 3.9, `numpy ≥ 1.22`, `scipy ≥ 1.9`. Optional:
+**Requirements:** Python ≥ 3.10, `numpy ≥ 1.22`, `scipy ≥ 1.9`. Optional:
 `h5py` (HDF5), `matplotlib` + `networkx` (plots/notebooks), `pytest` (tests).
 
 ---
