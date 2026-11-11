@@ -1,6 +1,6 @@
 # Build the NucNetPy user manual.
 #
-#   python -m pip install -e ".[docs]"
+#   python -m pip install -e ".[docs]"   # equations also need the Cairo library
 #   make -C docs/manual html      # browsable HTML
 #   make -C docs/manual pdf       # single PDF, no LaTeX required
 #   make -C docs/manual singlehtml

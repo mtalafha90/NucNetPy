@@ -50,8 +50,10 @@ dev = ["pytest>=7"]
 # tables; the package itself never imports it.
 notebook = ["jupyter>=1.0", "matplotlib>=3.6", "pandas>=1.5"]
 # Building the user manual in docs/manual.  rinohtype renders the PDF without
-# needing a LaTeX installation.
-docs = ["sphinx>=7", "furo", "myst-parser", "rinohtype"]
+# needing a LaTeX installation; it typesets equations with ziamath and
+# cairosvg, and cairosvg needs the Cairo library (libcairo2 on Debian and
+# Ubuntu, "brew install cairo" on macOS).
+docs = ["sphinx>=7", "furo", "myst-parser", "rinohtype", "ziamath", "cairosvg"]
 
 [project.scripts]
 nucnetpy = "nucnetpy.cli:main"

@@ -62,5 +62,9 @@ html_static_path = []
 # rinohtype writes the PDF directly rather than through LaTeX.  Left to itself
 # it derives the document from the LaTeX settings, where Sphinx has escaped the
 # author's initials for LaTeX ("M.\@{} H.\@{} ..."), and prints the escapes
-# literally on the title page and in the PDF metadata.
-rinoh_documents = [dict(doc=master_doc, target="nucnetpy", title=project, author=author)]
+# literally on the title page and in the PDF metadata.  It typesets equations
+# with the ziamath and cairosvg packages (the "docs" extra) and leaves them out,
+# with only a warning, when they are missing.  nucnetpy.rtt selects the book
+# template with the style sheet nucnetpy.rts, which sets the size of equations.
+rinoh_documents = [dict(doc=master_doc, target="nucnetpy", title=project, author=author,
+                        template="nucnetpy.rtt")]
