@@ -8,7 +8,7 @@ one starts from the composition the previous one left behind.
 
 This module holds what the other scripts share: the six stages, the species
 each figure of the paper shows, the numbers the paper quotes, the file paths
-and the small rate hook described in :class:`RateFactors`.
+and the functions that read the inputs.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import gzip
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 HERE = Path(__file__).resolve().parent
 DATA = HERE / "data"
@@ -106,44 +106,13 @@ PAPER_RAL_MEAN = {"carbon": 2.85e-4, "neon": 2.23e-4, "oxygen": 1.29e-4,
 PAPER_RAL_OVERALL = 1.68e-4
 
 
-def is_electron_capture(reaction) -> bool:
-    """True for a ReacLib rate with an electron among its reactants."""
-    return any(p.species == "electron" for p in reaction.reactants)
-
-
-class RateFactors:
-    """Rate hook for :func:`nucnetpy.evolve_zone`: screening and electron captures.
-
-    ReacLib fits the three electron captures it holds (3He, 7Be and the pep
-    reaction) per unit electron density, so each must be multiplied by
-    ``rho * Ye`` (Cyburt et al. 2010, ApJS 189, 240).  NucNetPy 1.0.0 does not
-    apply that factor; it treats the electron like the photon, whose density
-    the rate already contains.  This hook supplies it through the screening
-    argument, the per-reaction multiplier that NucNetPy evaluates for every
-    rate.  ``screening`` is an optional screening model, such as
-    :class:`nucnetpy.SkyNetScreening`, applied on top.
-    """
-
-    def __init__(self, screening=None):
-        self.screening = screening
-
-    def update(self, abundances, t9, rho, ye) -> None:
-        update = getattr(self.screening, "update", None)
-        if update is not None:
-            update(abundances, t9, rho, ye)
-
-    def __call__(self, reaction, t9: float, rho: float,
-                 ye: Optional[float] = None) -> float:
-        factor = 1.0
-        if self.screening is not None:
-            factor *= float(self.screening(reaction, t9, rho, ye))
-        if is_electron_capture(reaction):
-            factor *= float(rho) * float(ye if ye is not None else 0.0)
-        return factor
-
-
 def load_network(path: Path = NETWORK_FILE, reverse_partition_functions: bool = True):
-    """Read the gzipped libnucnet-style network with NucNetPy's XML reader."""
+    """Read the gzipped libnucnet-style network with NucNetPy's XML reader.
+
+    The reader puts the partition-function factor on the rates that ReacLib
+    derives by detailed balance; it finds them by ReacLib's ``v`` flag, which
+    the network file keeps on each fit label.
+    """
     from nucnetpy.io.xml import read_xml
     with gzip.open(path, "rb") as fh:
         return read_xml(fh, reverse_partition_functions=reverse_partition_functions)

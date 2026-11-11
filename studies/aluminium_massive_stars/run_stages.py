@@ -42,45 +42,24 @@ from pathlib import Path
 
 import numpy as np
 
-from common import RESULTS, STAGES, RateFactors, load_composition, load_network
+from common import RESULTS, STAGES, load_composition, load_network
 
 #: Abundances kept in the saved trajectories.  A species is saved if its mass
 #: fraction exceeds this anywhere in the stage.
 SAVE_FLOOR = 1.0e-30
 
 
-def assign_reverse_partition_functions(net):
-    """Put the partition-function factor on the rates ReacLib flags as reverse.
-
-    NucNetPy 1.0.0 recognises a ReacLib reverse rate from its coefficients
-    and assumes that the reverse member of a pair is the endothermic one.
-    For 168 pairs in this network ReacLib's forward rate is the endothermic
-    one (a capture into a particle-unbound nucleus near the drip lines), so
-    NucNetPy puts the factor on the capture instead of the photodisintegration.
-    Three more pairs are missed altogether because the library rounds their
-    large ``a6`` coefficients; one of them is 29Si(g,p)28Al, whose factor is
-    1.64 at T9 = 3.6.  The network file keeps ReacLib's own flag (a trailing
-    ``v`` on each fit label), so the factor is placed on the flagged member
-    here.  Returns the number of reactions whose assignment changed.
-    """
-    from nucnetpy.detailed_balance import _partition_table
-    from nucnetpy.reactions import PartitionRatio
-    from nucnetpy.species import is_massless
-
-    changed = 0
-    for r in net.reactions.reactions:
-        flagged = bool(r.rate_fits) and all(f.label.endswith("v") for f in r.rate_fits)
-        if flagged and r.partition_ratio is None:
-            num = tuple(_partition_table(net.species, p.species) + (p.count,)
-                        for p in r.products if not is_massless(p.species))
-            den = tuple(_partition_table(net.species, p.species) + (p.count,)
-                        for p in r.reactants if not is_massless(p.species))
-            r.partition_ratio = PartitionRatio(num, den)
-            changed += 1
-        elif not flagged and r.partition_ratio is not None:
-            r.partition_ratio = None
-            changed += 1
-    return changed
+def nucnetpy_commit() -> str:
+    """The git commit of the NucNetPy checkout in use, or "unknown"."""
+    import subprocess
+    import nucnetpy
+    try:
+        out = subprocess.run(["git", "rev-parse", "--short=12", "HEAD"],
+                             cwd=Path(nucnetpy.__file__).resolve().parent,
+                             capture_output=True, text=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    return out.stdout.strip()
 
 
 def output_times(stage, points: int) -> np.ndarray:
@@ -189,14 +168,13 @@ def main() -> int:
     summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
 
     net = load_network()
-    reassigned = assign_reverse_partition_functions(net)
-    print(f"{len(net.species)} species, {len(net.reactions.reactions)} reactions; "
-          f"reverse-rate factor reassigned on {reassigned} reactions", flush=True)
+    with_factor = sum(r.partition_ratio is not None for r in net.reactions.reactions)
+    print(f"{len(net.species)} species, {len(net.reactions.reactions)} reactions, "
+          f"{with_factor} of them derived reverse rates", flush=True)
     screening = None
     if args.screening == "skynet":
         from nucnetpy.screening import SkyNetScreening
         screening = SkyNetScreening(net.species)
-    hook = RateFactors(screening)
 
     order = [s.key for s in STAGES]
     if args.resume:
@@ -218,10 +196,11 @@ def main() -> int:
         "solver": args.solver, "screening": args.screening,
         **({"rtol": args.rtol, "atol": args.atol} if args.solver == "bdf" else
            {"max_change": args.max_change, "x_min": args.x_min}),
-        "points": args.points, "reverse_rate_factor_reassigned": reassigned,
+        "points": args.points, "reverse_rates_with_partition_factor": with_factor,
         "electron_captures_times_rho_ye": True, "silicon_unit": args.silicon_unit,
         "started_from": str(args.from_results or outdir.name),
-        "nucnetpy": nucnetpy.__version__, "numpy": np.__version__,
+        "nucnetpy": nucnetpy.__version__, "nucnetpy_commit": nucnetpy_commit(),
+        "numpy": np.__version__,
         "scipy": scipy.__version__, "python": sys.version.split()[0],
         "platform": platform.platform(),
     }
@@ -231,7 +210,7 @@ def main() -> int:
         stage = stages[key]
         print(f"{stage.title}: T9 = {stage.t9}, rho = {stage.rho:g} g/cm^3, "
               f"{stage.duration} {stage.unit} ...", flush=True)
-        result, keep, info, final = run_stage(net, stage, abundances, args, hook)
+        result, keep, info, final = run_stage(net, stage, abundances, args, screening)
         names = np.array(result.species)
         np.savez_compressed(
             outdir / f"{key}.npz",

@@ -71,9 +71,9 @@ composition is then divided by 1.0001.
 
 **Integration.** Implicit (backward) Euler steps solved by Newton–Raphson
 iterations, the scheme NucNet Tools uses (`stepper.py`). Each step is sized so
-that no mass fraction above 10⁻¹⁵ changes by more than 0.5 per cent. The
-next section explains why NucNetPy's own integrator, `evolve_zone`, could not
-be used. Results are recorded at 300 times per stage, spaced evenly in the
+that no mass fraction above 10⁻¹⁵ changes by more than 0.5 per cent. A later
+section explains why SciPy's BDF method, which `evolve_zone` uses by default,
+could not be used, and how this scheme then went into NucNetPy itself. Results are recorded at 300 times per stage, spaced evenly in the
 logarithm of time from the start of the paper's time axis.
 
 The equations integrated are NucNetPy's. Within a stage the temperature and
@@ -264,9 +264,10 @@ calculation needs nothing but NucNetPy. `build_inputs.py` regenerates them; it
 needs pynucastro 3.2.0 and the file `sollo03.dat` from StarFit 0.19.1 (see the
 instructions at the top of that script).
 
-## Why the stages are not integrated with `evolve_zone`
+## Why the stages are not integrated with SciPy's BDF method
 
-`nucnetpy.evolve_zone` passes the network to SciPy's BDF integrator, and
+With its default method, `nucnetpy.evolve_zone` passes the network to SciPy's
+BDF integrator, and
 NucNetPy's right-hand side sets any negative abundance to zero before using
 it. On this 891-nuclide network that combination fails in the very first
 stage. As hydrogen runs out, the higher-order BDF formula predicts a slightly
@@ -294,34 +295,52 @@ burning that rejected one step in five. Since the implicit Euler solution is
 itself never negative, `stepper.py` keeps the iterates at or above zero, which
 removed the rejections and made silicon burning twelve times faster.
 
-## Two things NucNetPy does not do yet
+NucNetPy now offers this scheme itself, as
+`evolve_zone(..., method="adaptive_implicit_euler")`, which was written from
+`stepper.py`. Over the first 100 s of hydrogen burning the two agree to
+2 × 10⁻¹⁵ and take the same 4,128 steps. The study keeps its own copy because
+it can use the fast evaluator in `fastnet.py`, which makes it about thirty
+times faster than NucNetPy's own right-hand side.
 
-The calculation needed two small corrections that NucNetPy 1.0.0 does not make
-on its own. Both are made by this directory's scripts, not by changes to
-NucNetPy.
+## Two corrections, now made by NucNetPy itself
+
+The calculation needed two corrections that NucNetPy 1.0.0 did not make. The
+study first made them in its own scripts. Both are now part of NucNetPy
+(pull request #9), and the scripts leave them to NucNetPy.
 
 1. **Electron captures.** ReacLib gives the rates of its three electron
    captures (on ³He, on ⁷Be, and the pep reaction p + p + e⁻) per unit electron
-   density, so each must be multiplied by ρY<sub>e</sub>. NucNetPy does not do
-   this. `common.RateFactors` supplies the factor through the screening hook
-   that NucNetPy evaluates for every rate. The resulting rate coefficients
-   agree exactly with pynucastro's.
+   density, so each must be multiplied by ρY<sub>e</sub>. NucNetPy now does
+   this in `Reaction.bare_rate`. The resulting rate coefficients agree exactly
+   with pynucastro's.
 2. **Which member of a reverse pair gets the partition functions.** NucNetPy
-   assumes that ReacLib's derived reverse rate is always the endothermic
-   member of a pair. In 168 pairs of this network the forward rate is the
-   endothermic one (a capture into a nucleus that is unbound near the drip
-   lines), so NucNetPy corrects the capture instead of the
-   photodisintegration. Three more pairs are missed because ReacLib rounds
+   1.0.0 assumed that ReacLib's derived reverse rate is always the
+   endothermic member of a pair. In 168 pairs of this network the forward
+   rate is the endothermic one (a capture into a nucleus that is unbound near
+   the drip lines), so NucNetPy corrected the capture instead of the
+   photodisintegration. Three more pairs were missed because ReacLib rounds
    their large coefficients; one of them is ²⁹Si(γ,p)²⁸Al, whose correction is
-   a factor of 1.64 at 3.6 GK. The network file keeps ReacLib's own flag for
-   derived rates, and `run_stages.assign_reverse_partition_functions` places
-   the factor by that flag.
+   a factor of 1.64 at 3.6 GK. NucNetPy now goes by ReacLib's own flag for
+   derived rates, which the network file keeps, and recognises the rounded
+   pairs.
+
+The four runs were then repeated with NucNetPy making both corrections. At the
+start of every stage, with and without screening, the right-hand side and the
+Jacobian came out bit for bit the same as with the scripts' own corrections.
+The main run, the screened run and silicon burning for 0.733 years reproduced
+the stored results bit for bit. In the check run, every mass fraction above
+10⁻¹² agreed to about 10⁻¹² from hydrogen to oxygen burning. Its silicon
+burning rejects many steps, and there rounding changed which ones (69 instead
+of 90), so the final mass fractions moved by up to 10⁻⁵. That is far less than
+the step-size error that this run is there to measure. The stored results are
+therefore the original ones, and their `run_summary.json` files still record
+the scripts' corrections (`reverse_rate_factor_reassigned`).
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `common.py` | The six stages, the species in each figure, the values the paper quotes, and the electron-capture factor |
+| `common.py` | The six stages, the species in each figure, the values the paper quotes, and the functions that read the inputs |
 | `build_inputs.py` | Builds the network and the initial composition in `data/` |
 | `stepper.py` | Implicit Euler steps with Newton–Raphson iterations |
 | `fastnet.py` | NucNetPy's network equations at fixed temperature and density, evaluated as sparse matrices |

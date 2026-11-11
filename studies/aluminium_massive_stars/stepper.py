@@ -1,10 +1,10 @@
 """A NucNet Tools style time stepper built from NucNetPy's own pieces.
 
-``nucnetpy.evolve_zone`` hands the network to SciPy's BDF integrator.  On the
-891-nuclide network of this study that fails in the first stage: as hydrogen
-runs out, the higher-order BDF formula predicts a small negative hydrogen
-abundance, NucNetPy's right-hand side clips it to zero and so stops all
-proton captures, and the step size collapses (see README.md).
+``nucnetpy.evolve_zone`` with SciPy's BDF method fails on the 891-nuclide
+network of this study in the first stage: as hydrogen runs out, the
+higher-order BDF formula predicts a small negative hydrogen abundance,
+NucNetPy's right-hand side clips it to zero and so stops all proton captures,
+and the step size collapses (see README.md).
 
 NucNet Tools, which the paper used, avoids this by taking implicit (backward)
 Euler steps, solved with Newton-Raphson iterations, and by sizing each step
@@ -24,6 +24,13 @@ iterations slow down.  A step is accepted when the iterations converge and no ab
 whose mass fraction was above ``x_min`` changes by more than
 ``2 * max_change``; the next step is then sized to aim at ``max_change``.
 Steps also end exactly on the requested output times.
+
+NucNetPy now offers the same scheme itself, as
+``evolve_zone(..., method="adaptive_implicit_euler")``, which was written
+from this module.  Over the first 100 s of hydrogen burning the two agree to
+2e-15 and take the same 4,128 steps.  The study keeps this copy because it
+can use the fast evaluator of fastnet.py, which makes it about thirty times
+faster.
 """
 from __future__ import annotations
 
@@ -69,7 +76,7 @@ def evolve(network, abundances, times: Sequence[float], t9: float, rho: float,
     ``abundances`` maps species names to abundances Y (mass fraction divided
     by mass number).  ``times`` must start at the initial time and increase.
     The first step defaults to a thousandth of the first output interval.
-    ``screening`` is the rate hook (``common.RateFactors``).  With ``fast``
+    ``screening`` is NucNetPy's screening model, or None.  With ``fast``
     (the default) the right-hand side and Jacobian are evaluated by
     :class:`fastnet.FrozenNetwork`, which reproduces NucNetPy's functions to
     round-off a hundred times faster; ``fast=False`` calls
