@@ -56,7 +56,7 @@ without raising an error.
 ## Citing
 
 Please cite the archived release
-([10.5281/zenodo.20756798](https://doi.org/10.5281/zenodo.20756798)) and
-acknowledge the NucNet Tools and libnucnet ecosystem, whose data model and
-workflows this package reimplements, together with the JINA reaction-rate
-database that supplies the nuclear data.
+([10.5281/zenodo.20756797](https://doi.org/10.5281/zenodo.20756797), which
+always resolves to the latest version) and acknowledge the NucNet Tools and
+libnucnet ecosystem, whose data model and workflows this package reimplements,
+together with the JINA reaction-rate database that supplies the nuclear data.

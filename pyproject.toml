@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nucnetpy"
-version = "1.0.0"
+version = "1.1.0"
 description = "Pure-Python nuclear reaction networks: a replacement for NucNet Tools workflows"
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
@@ -39,7 +39,7 @@ Homepage = "https://github.com/mtalafha90/NucNetPy"
 Repository = "https://github.com/mtalafha90/NucNetPy"
 Documentation = "https://github.com/mtalafha90/NucNetPy/blob/main/docs/manual/nucnetpy-manual.pdf"
 Issues = "https://github.com/mtalafha90/NucNetPy/issues"
-DOI = "https://doi.org/10.5281/zenodo.20756798"
+DOI = "https://doi.org/10.5281/zenodo.20756797"
 
 [project.optional-dependencies]
 hdf5 = ["h5py>=3.8"]
