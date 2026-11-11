@@ -25,12 +25,16 @@ authors:
 url: "https://github.com/mtalafha90/NucNetPy"
 repository-code: "https://github.com/mtalafha90/NucNetPy"
 license: GPL-3.0-or-later
-version: "1.0.0"
-doi: 10.5281/zenodo.20756798
+version: "1.1.0"
+date-released: "2026-11-11"
+doi: 10.5281/zenodo.20756797
 identifiers:
   - type: doi
+    value: 10.5281/zenodo.20756797
+    description: Zenodo archive of NucNetPy, all versions (resolves to the latest)
+  - type: doi
     value: 10.5281/zenodo.20756798
-    description: Zenodo archive of NucNetPy
+    description: Zenodo archive of NucNetPy 1.0.0
 keywords:
   - nucleosynthesis
   - nuclear astrophysics

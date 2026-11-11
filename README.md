@@ -1,7 +1,7 @@
 # NucNetPy
 
 [![CI](https://github.com/mtalafha90/NucNetPy/actions/workflows/ci.yml/badge.svg)](https://github.com/mtalafha90/NucNetPy/actions/workflows/ci.yml)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20756798.svg)](https://doi.org/10.5281/zenodo.20756798)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20756797.svg)](https://doi.org/10.5281/zenodo.20756797)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 **NucNetPy** is a pure-Python nuclear reaction-network package that reproduces the
@@ -526,15 +526,18 @@ If you use this package in scientific work, please cite it via its archived
 release and acknowledge the original NucNet Tools / libnucnet ecosystem and the
 JINA reaction-rate database that provides the nuclear data.
 
-**DOI:** [10.5281/zenodo.20756798](https://doi.org/10.5281/zenodo.20756798)
+**DOI:** [10.5281/zenodo.20756797](https://doi.org/10.5281/zenodo.20756797)
+(all versions; it always resolves to the latest release). Each release also
+has its own DOI, listed on the Zenodo page; that of 1.0.0 is
+[10.5281/zenodo.20756798](https://doi.org/10.5281/zenodo.20756798).
 
 ```bibtex
 @software{nucnetpy,
   author  = {Talafha, Mohammed H. and Ershaidat, Nidal M.},
   title   = {NucNetPy: a pure-Python nuclear reaction-network package},
-  version = {1.0.0},
+  version = {1.1.0},
   url     = {https://github.com/mtalafha90/NucNetPy},
-  doi     = {10.5281/zenodo.20756798},
+  doi     = {10.5281/zenodo.20756797},
   year    = {2026}
 }
 ```
