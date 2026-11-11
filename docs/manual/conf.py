@@ -18,7 +18,7 @@ author = "M. H. Talafha and N. M. Ershaidat"
 try:
     release = importlib.metadata.version("nucnetpy")
 except importlib.metadata.PackageNotFoundError:  # building without an install
-    release = "1.0.0"
+    release = "1.1.0"
 version = release
 
 extensions = [

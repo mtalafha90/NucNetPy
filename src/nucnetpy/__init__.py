@@ -6,7 +6,7 @@ from .solver import evolve_zone, evolve_network_zones, constant_thermo, time_gri
 from .io.xml import read_xml, write_xml, read_network_xml, write_zone_xml, read_xml_string
 from .io.jina import read_jina_xml, combine_jina_xml, jina_database_summary
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from .nse import solve_nse, NSEResult, equilibrium_ratio
 from .screening import ScreeningContext, weak_screening_factor, reaction_screening_factor, graboske_intermediate_factor, SkyNetScreening
