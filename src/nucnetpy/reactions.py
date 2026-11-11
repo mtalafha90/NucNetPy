@@ -181,7 +181,25 @@ class Reaction:
     def reactant_order(self) -> int:
         return sum(p.count for p in self.nuclear_reactants)
 
+    @property
+    def electron_count(self) -> int:
+        """Number of electrons among the reactants; non-zero for an electron capture."""
+        return sum(p.count for p in self.reactants if p.species == "electron")
+
     def bare_rate(self, t9: float, rho: float = 1.0, ye: Optional[float] = None) -> float:
+        """Return the rate coefficient before screening.
+
+        The ReacLib fits, the tabulated rate, the constant rate and the rate
+        function are added together.  Two factors apply to the ReacLib fits
+        alone.  The first is the partition-function ratio of a library reverse
+        rate (:attr:`partition_ratio`).  The second is the electron density of
+        an electron capture: ReacLib fits its electron captures (on 3He and
+        7Be, and the pep reaction p + p + e-) per unit ``rho * Ye`` (Cyburt et
+        al. 2010, ApJS 189, 240), so their fitted part is multiplied by
+        ``(rho * Ye) ** n`` for ``n`` electron reactants.  That factor needs
+        ``ye``; without it the fit is returned per unit electron density.  The
+        network's right-hand side and Jacobian always supply ``Ye``.
+        """
         total = 0.0
         if self.constant_rate is not None:
             total += float(self.constant_rate)
@@ -192,8 +210,13 @@ class Reaction:
         fitted = 0.0
         for fit in self.rate_fits:
             fitted += fit.rate(t9)
-        if self.partition_ratio is not None and fitted:
-            fitted *= self.partition_ratio(t9)
+        if fitted:
+            if self.partition_ratio is not None:
+                fitted *= self.partition_ratio(t9)
+            if ye is not None:
+                electrons = self.electron_count
+                if electrons:
+                    fitted *= (float(rho) * float(ye)) ** electrons
         return float(total + fitted)
 
     def rate(self, t9: float, rho: float = 1.0, ye: Optional[float] = None, screening: Optional[Callable[["Reaction", float, float, Optional[float]], float]] = None) -> float:
@@ -215,6 +238,13 @@ class Reaction:
         return out
 
     def flux(self, abundances: Mapping[str, float], t9: float, rho: float = 1.0, screening: Optional[Callable[["Reaction", float, float, Optional[float]], float]] = None, ye: Optional[float] = None) -> float:
+        """Return the flow of this reaction, in reactions per nucleon per second.
+
+        For an electron capture, ``ye`` defaults to the electron fraction of
+        ``abundances`` (see :meth:`bare_rate`).
+        """
+        if ye is None and self.electron_count:
+            ye = electron_fraction(abundances)
         lam = self.rate(t9, rho=rho, ye=ye, screening=screening)
         order = self.reactant_order
         # A diverging explicit integrator can hand us arbitrarily large
@@ -269,6 +299,23 @@ def _refresh_screening(screening, abundances: Mapping[str, float], t9: float,
         update(abundances, t9, rho, ye)
 
 
+def electron_fraction(abundances: Mapping[str, float]) -> float:
+    """Return ``Ye = sum(Z * Y)`` over the nuclides named in ``abundances``.
+
+    Names that are not nuclides (photons, leptons) and negative abundances
+    contribute nothing.
+    """
+    total = 0.0
+    for name, y in abundances.items():
+        try:
+            sp = Species.parse(name)
+        except Exception:
+            continue
+        if sp.a > 0:
+            total += sp.z * max(float(y), 0.0)
+    return float(total)
+
+
 @dataclass
 class ReactionNetwork:
     reactions: List[Reaction] = field(default_factory=list)
@@ -295,10 +342,22 @@ class ReactionNetwork:
         self.reactions = [r for r in self.reactions if r.conserves_a_z(species_map)[0]]
         return self
 
-    def rates(self, t9: float, rho: float = 1.0) -> Dict[str, float]:
-        return {r.string: r.rate(t9, rho=rho) for r in self.reactions}
+    def rates(self, t9: float, rho: float = 1.0, ye: Optional[float] = None) -> Dict[str, float]:
+        """Return the rate of every reaction.
+
+        Electron captures need ``ye``; without it their rates are per unit
+        electron density (see :meth:`Reaction.bare_rate`).
+        """
+        return {r.string: r.rate(t9, rho=rho, ye=ye) for r in self.reactions}
 
     def flows(self, abundances: Mapping[str, float], t9: float, rho: float = 1.0, screening: Optional[Callable[[Reaction, float, float, Optional[float]], float]] = None, ye: Optional[float] = None) -> Dict[str, float]:
+        """Return the flow of every reaction.
+
+        ``ye`` defaults to the electron fraction of ``abundances``; electron
+        captures need it (see :meth:`Reaction.bare_rate`).
+        """
+        if ye is None:
+            ye = electron_fraction(abundances)
         _refresh_screening(screening, abundances, t9, rho, ye)
         return {r.string: r.flux(abundances, t9=t9, rho=rho, screening=screening, ye=ye) for r in self.reactions}
 
@@ -307,8 +366,12 @@ class ReactionNetwork:
 
         Photons and leptons are left out: they are not part of the abundance
         vector, so a ``dY/dt`` for them would be a meaningless number that
-        downstream diagnostics would report as if it were a species.
+        downstream diagnostics would report as if it were a species.  ``ye``
+        defaults to the electron fraction of ``abundances``; electron captures
+        need it (see :meth:`Reaction.bare_rate`).
         """
+        if ye is None:
+            ye = electron_fraction(abundances)
         _refresh_screening(screening, abundances, t9, rho, ye)
         out: Dict[str, float] = defaultdict(float)
         for r in self.reactions:
