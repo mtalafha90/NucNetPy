@@ -7,16 +7,14 @@ on:
 
 jobs:
   test:
-    # ubuntu-latest is now Ubuntu 26.04, for which actions/setup-python has
-    # no Python 3.9, so the 3.9 job runs on Ubuntu 24.04.
-    runs-on: ${{ matrix.python-version == '3.9' && 'ubuntu-24.04' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         # Every version the package claims to support.  Each one resolves a
         # different SciPy release, and solver behaviour has differed between
         # SciPy releases before.
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     defaults:
       run:
         shell: bash          # with -eo pipefail, so a failure inside a pipe fails the step
@@ -35,7 +33,7 @@ jobs:
           nucnetpy nse tests/golden/golden_network.xml --t9 5 --rho 1e8 --ye 0.5 > /dev/null
           python examples/use_nucnetpy.py > /dev/null
       - name: Command-line reference is up to date
-        # argparse words its help differently on 3.9 and 3.13, and the page is
+        # argparse words its help differently on 3.13, and the page is
         # generated with 3.10-3.12, so check it on one of those.
         if: matrix.python-version == '3.11'
         run: |

@@ -7,7 +7,7 @@ name = "nucnetpy"
 version = "1.0.0"
 description = "Pure-Python nuclear reaction networks: a replacement for NucNet Tools workflows"
 readme = {file = "README.md", content-type = "text/markdown"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     {name = "Mohammed H. Talafha", email = "mtalafha901@gmail.com"},
     {name = "Nidal M. Ershaidat", email = "N.Ershaidat@ju.edu.jo"},
@@ -24,7 +24,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -50,8 +49,10 @@ dev = ["pytest>=7"]
 # tables; the package itself never imports it.
 notebook = ["jupyter>=1.0", "matplotlib>=3.6", "pandas>=1.5"]
 # Building the user manual in docs/manual.  rinohtype renders the PDF without
-# needing a LaTeX installation.
-docs = ["sphinx>=7", "furo", "myst-parser", "rinohtype"]
+# needing a LaTeX installation; it typesets equations with ziamath and
+# cairosvg, and cairosvg needs the Cairo library (libcairo2 on Debian and
+# Ubuntu, "brew install cairo" on macOS).
+docs = ["sphinx>=7", "furo", "myst-parser", "rinohtype", "ziamath", "cairosvg"]
 
 [project.scripts]
 nucnetpy = "nucnetpy.cli:main"
