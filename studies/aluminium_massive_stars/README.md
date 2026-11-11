@@ -234,7 +234,7 @@ four stage values gives it.
 
 ## How to reproduce
 
-Python 3.9 or later, NumPy, SciPy and, for the figures, matplotlib:
+Python 3.10 or later, NumPy, SciPy and, for the figures, matplotlib:
 
 ```bash
 git clone https://github.com/mtalafha90/NucNetPy.git
