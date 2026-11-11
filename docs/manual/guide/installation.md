@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Python 3.9 or later, with NumPy 1.22+ and SciPy 1.9+. Nothing else is required
+Python 3.10 or later, with NumPy 1.22+ and SciPy 1.9+. Nothing else is required
 to use the package.
 
 ## From a checkout
@@ -59,3 +59,15 @@ For a single self-contained file, suitable for a submission archive:
 ```bash
 sphinx-build -b singlehtml docs/manual docs/manual/_build/singlehtml
 ```
+
+The PDF is written by rinohtype, without LaTeX:
+
+```bash
+make -C docs/manual pdf          # docs/manual/_build/pdf/nucnetpy.pdf
+```
+
+rinohtype typesets equations with the `ziamath` and `cairosvg` packages, which
+the `docs` extra installs. `cairosvg` also needs the Cairo library
+(`libcairo2` on Debian and Ubuntu, `brew install cairo` on macOS). Without them
+the PDF is still written, but every equation is left out and the build prints
+only a warning.

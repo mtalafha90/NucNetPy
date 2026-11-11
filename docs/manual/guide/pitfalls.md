@@ -64,12 +64,12 @@ file's masses over the library's Q values.
 
 ## Electron captures without the electron density
 
-ReacLib fits its three electron captures (on ³He and ⁷Be, and the pep
-reaction p + p + e⁻) per unit electron density, ρYe. Treated like a
+ReacLib fits its three electron captures (on $^3$He and $^7$Be, and the pep
+reaction p + p + e⁻) per unit electron density, $\rho Y_e$. Treated like a
 photodisintegration, whose rate already contains the photon density, they run
 too slowly by that factor: by about 3 in the core of a massive star on the
 main sequence, and by about 100 in the Sun. NucNetPy multiplies the ReacLib
-fits of a reaction by ρYe once for each electron among its reactants.
+fits of a reaction by $\rho Y_e$ once for each electron among its reactants.
 `Reaction.rate` and `ReactionNetwork.rates` need `ye` for that. `Reaction.flux`,
 `ReactionNetwork.flows`, `ReactionNetwork.ydot` and the network's right-hand
 side work it out from the abundances. NucNetPy 1.0.0 left the factor out.

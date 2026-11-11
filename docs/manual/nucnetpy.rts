@@ -1,0 +1,15 @@
+[STYLESHEET]
+name=NucNetPy manual
+description=rinohtype's Sphinx style sheet, with equations at the size of the text
+base=sphinx
+
+# rinohtype hands the font size of an equation, in points, to ziamath, which
+# takes it as pixels; at 96 pixels to the inch the equation then comes out at
+# three quarters of the size asked for.  13.33pt gives 10pt, the size of the
+# body text.  If a later rinohtype converts the units itself, equations will
+# look a third too large: set these back to 10pt.
+[inline equation]
+font_size=13.33pt
+
+[math block equation]
+font_size=13.33pt

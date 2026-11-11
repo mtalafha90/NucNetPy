@@ -1,0 +1,4 @@
+[TEMPLATE_CONFIGURATION]
+name=NucNetPy manual
+template=book
+stylesheet=nucnetpy.rts
