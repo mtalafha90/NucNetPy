@@ -121,7 +121,11 @@ class Network:
         return [n for n in raw.split(",") if n]
 
     def abundance_matrix(self, species: Optional[Sequence[str]] = None) -> Tuple[List[str], np.ndarray]:
-        names = [normalize_species_name(s) for s in (species or self.species_names())]
+        from .species import is_massless
+        if species is None:
+            # Photons and leptons take part in reactions but have no abundance.
+            species = [s for s in self.species_names() if not is_massless(s)]
+        names = [normalize_species_name(s) for s in species]
         arr = np.zeros((len(self.zones), len(names)))
         for i, zone in enumerate(self.zones):
             for j, name in enumerate(names):

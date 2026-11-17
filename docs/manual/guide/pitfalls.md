@@ -101,7 +101,16 @@ A mass excess of zero is not a neutral default: it makes an unbound nuclide look
 as tightly bound as the most stable one. Left in an NSE solve, $^{5}$Li reached
 a mass fraction of 0.28 and displaced the iron peak. They are therefore recorded
 in `network.validate()["species_without_nuclear_data"]` and excluded from
-equilibrium solves by default.
+equilibrium solves by default. `nucnetpy validate` reports them in a single
+`no_nuclear_data` warning.
+
+The record has to survive a file. Before version 1.1.1, `nucnetpy jina-combine`
+and `write_xml` wrote each placeholder out as an ordinary nuclide record with a
+mass excess of zero, and reading the file back could no longer tell it from real
+data, so an equilibrium solve on the combined file included it again. They now
+leave placeholders out of the nuclide records, and both readers recreate and
+record them from the reactions that name them. Regenerate any combined file
+written by an earlier version.
 
 ## Trusting `success` without checking it
 

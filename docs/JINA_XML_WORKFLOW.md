@@ -35,9 +35,19 @@ net = read_jina_xml(
 ```bash
 nucnetpy jina-summary jina_nuclides.xml jina_reactions.xml
 nucnetpy jina-combine jina_nuclides.xml jina_reactions.xml combined_network.xml
+nucnetpy validate combined_network.xml
 nucnetpy rates combined_network.xml --t9 1.0 --rho 1e5
 nucnetpy conservation combined_network.xml
 ```
+
+The combined file keeps the nuclide records exactly as the nuclide file gives
+them. A species that the reactions name but the nuclide file leaves out has no
+record in it either; the reader recreates it as a placeholder and records it as
+having no nuclear data, as it does for the separate files. `nucnetpy validate`
+reports those placeholders in one `no_nuclear_data` warning. It does not report
+photons and leptons: they take part in reactions but are not nuclides. Combined
+files written before version 1.1.1 stored the placeholders as nuclide records
+with a mass excess of zero, so regenerate them.
 
 ## Important numerical point
 

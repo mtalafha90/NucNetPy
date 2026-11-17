@@ -17,14 +17,20 @@ class ValidationIssue:
 
 
 def validate_network(network: Network, strict: bool = False) -> List[ValidationIssue]:
+    from .species import is_massless
     issues: List[ValidationIssue] = []
     for name, sp in network.species.items():
+        if is_massless(name):
+            continue
         if sp.a < 1 or sp.z < 0 or sp.z > sp.a:
             issues.append(ValidationIssue('error', 'bad_species', f'{name}: invalid Z/A'))
     missing = set()
     for r in network.reactions.reactions:
         for p in r.reactants + r.products:
-            if p.species not in network.species:
+            # Photons and leptons are reaction participants, not nuclides, so
+            # their absence from the species map is expected (as in
+            # Network.validate).
+            if p.species not in network.species and not is_massless(p.species):
                 missing.add(p.species)
         ok, da, dz = r.conserves_a_z(network.species)
         if not ok:
@@ -33,6 +39,20 @@ def validate_network(network: Network, strict: bool = False) -> List[ValidationI
             issues.append(ValidationIssue('warning', 'missing_rate', f'{r.string}: no rate data'))
     for m in sorted(missing):
         issues.append(ValidationIssue('warning', 'missing_species', f'{m}: appears in reactions but not in species list'))
+    # Species that a reaction or zone names but no nuclide record describes.
+    # They carry a placeholder mass excess of zero and are left out of the
+    # equilibrium solvers; one summary keeps a large database readable.
+    placeholders = network.species_without_nuclear_data()
+    if placeholders:
+        shown = ", ".join(placeholders[:10])
+        more = f" and {len(placeholders) - 10} more" if len(placeholders) > 10 else ""
+        one = len(placeholders) == 1
+        issues.append(ValidationIssue(
+            'warning', 'no_nuclear_data',
+            f'{len(placeholders)} species {"has" if one else "have"} no nuclide '
+            f'record ({shown}{more}); {"it carries" if one else "they carry"} a '
+            f'placeholder mass excess of zero and {"is" if one else "are"} left '
+            f'out of equilibrium calculations'))
     return issues
 
 

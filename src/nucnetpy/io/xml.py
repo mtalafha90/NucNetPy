@@ -94,17 +94,58 @@ read_network_xml = read_xml
 def read_xml_root(root, source: str = '<xml-root>',
                   reverse_partition_functions: bool = True) -> Network:
     net = Network(metadata={"source_file": str(source)})
-    _parse_species(root, net)
+    described = _parse_species(root, net)
     _parse_reactions(root, net)
     _parse_zones(root, net)
+    _record_species_without_nuclear_data(net, described)
     if reverse_partition_functions:
         from ..detailed_balance import apply_reverse_partition_functions
         apply_reverse_partition_functions(net)
     return net
 
 
-def _parse_species(root, net: Network):
-    """Parse true nuclide/species records, avoiding zone mass-fraction records."""
+def _record_species_without_nuclear_data(net: Network, described) -> None:
+    """Create and record the species that no nuclide record describes.
+
+    A reaction or a zone can name a nuclide that the nuclide records leave out.
+    :meth:`Network.ensure_species` then gives it a placeholder mass excess of
+    zero.  That is not a physical value: in an equilibrium calculation it makes
+    an unbound nuclide look as tightly bound as the most stable one.  The names
+    are recorded in ``metadata["species_without_nuclear_data"]`` so that
+    validation can report them, the equilibrium solvers can leave them out,
+    and :func:`write_xml` does not write them out as if they had nuclear data.
+
+    ``described`` holds the species that a nuclide record with data defined.
+    Photons and leptons are participants, not nuclides, and are never recorded.
+    """
+    from ..species import is_massless
+    names = set(net.species)
+    names.update(net.reactions.species_names())
+    for zone in net.zones:
+        names.update(zone.abundances)
+    placeholders = set(net.species_without_nuclear_data())
+    for name in names:
+        key = normalize_species_name(name)
+        if key in described or is_massless(key):
+            continue
+        try:
+            net.ensure_species(key)
+        except Exception:
+            continue
+        placeholders.add(key)
+    if placeholders:
+        net.metadata["species_without_nuclear_data"] = ",".join(sorted(placeholders))
+
+
+def _parse_species(root, net: Network) -> set:
+    """Parse true nuclide/species records, avoiding zone mass-fraction records.
+
+    Returns the names of the species defined by a record that carries nuclear
+    data.  A bare reference such as ``<nuc name="h1" count="2"/>`` names a
+    species without describing it, so a species known only from one is left
+    out and later recorded as having no nuclear data.
+    """
+    described = set()
     for el in root.iter():
         tg = _tag(el)
         if tg not in {"nuclide", "nuc", "species"}:
@@ -138,9 +179,12 @@ def _parse_species(root, net: Network):
 
         # Avoid overwriting rich mass-table records with lightweight reaction-side
         # references such as <nuc name="h1" count="2"/>.
-        if name and z is None and a is None and mass_excess is None and spin is None and _child(el, 'partf_table', 'partition_function', 'partition-function') is None:
-            if normalize_species_name(name) in net.species:
-                continue
+        lightweight = bool(name and z is None and a is None and mass_excess is None
+                           and spin is None
+                           and _child(el, 'partf_table', 'partition_function',
+                                      'partition-function') is None)
+        if lightweight and normalize_species_name(name) in net.species:
+            continue
 
         try:
             kwargs = {"mass_excess": float(mass_excess or 0.0)}
@@ -191,8 +235,11 @@ def _parse_species(root, net: Network):
             if part:
                 sp = Species(sp.name, sp.z, sp.a, mass_excess=sp.mass_excess, spin=sp.spin, source=sp.source, partition=part)
             net.add_species(sp)
+            if not lightweight:
+                described.add(normalize_species_name(sp.name))
         except Exception:
             continue
+    return described
 
 
 def _participant_name(el) -> Optional[str]:
@@ -401,9 +448,18 @@ def _parse_zones(root, net: Network):
 
 
 def write_xml(network: Network, path: str | Path) -> None:
+    from ..species import is_massless
     root = ET.Element('nucnetpy')
     nucs = ET.SubElement(root, 'nuclear_data')
+    # A placeholder has no nuclear data, so writing it as a nuclide record would
+    # turn its invented mass excess of zero into data.  It is left out, and the
+    # reader recreates and records it from the reactions that name it.  Photons
+    # and leptons are reaction participants, not nuclides.
+    skip = set(network.species_without_nuclear_data())
     for sp in sorted(network.species.values(), key=lambda s: (s.z, s.a, s.name)):
+        key = normalize_species_name(sp.name)
+        if key in skip or is_massless(key):
+            continue
         ne = ET.SubElement(nucs, 'nuclide')
         ET.SubElement(ne, 'z').text = str(sp.z)
         ET.SubElement(ne, 'a').text = str(sp.a)
