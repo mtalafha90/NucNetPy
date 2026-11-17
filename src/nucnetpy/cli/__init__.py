@@ -157,10 +157,87 @@ def cmd_species_history(args):
     for i, label, y in species_history(n, args.species): print(i, '|'.join(label), f"{y:.12e}")
 
 
+#: Above this many species ``evolve-zone`` warns that the integration may be
+#: slow.  It is the evolve limit of ``validation/benchmark_performance.py``:
+#: NucNetPy evaluates its right-hand side in a Python loop over the reactions,
+#: which suits networks of up to a few hundred species.
+LARGE_NETWORK = 400
+
+
+def _duration(seconds: float) -> str:
+    seconds = int(round(seconds))
+    if seconds < 60:
+        return f"{seconds} s"
+    minutes, seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes} min {seconds} s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours} h {minutes} min"
+
+
+class _Progress:
+    """Report how far an integration has got, on standard error.
+
+    Called with the time the integrator has reached; prints at most once per
+    ``interval`` seconds of computing time, so a short run prints nothing.
+    """
+
+    def __init__(self, times, interval: float):
+        import time
+        self.times = times
+        self.interval = interval
+        self.start = self.last = time.perf_counter()
+        self.reached = float(times[0])
+
+    def __call__(self, t: float) -> None:
+        import time
+        import numpy as np
+        self.reached = max(self.reached, float(t))
+        now = time.perf_counter()
+        if now - self.last < self.interval:
+            return
+        self.last = now
+        done = int(np.searchsorted(self.times, self.reached, side="right")) - 1
+        print(f"evolve-zone: reached t = {self.reached:.4g} s of {self.times[-1]:.4g} s "
+              f"({done} of {len(self.times) - 1} output times) after "
+              f"{_duration(now - self.start)}", file=sys.stderr, flush=True)
+
+
+def _warn_if_large(n, z, thermo) -> None:
+    """Say up front when a network is too large to integrate quickly."""
+    import time
+    import numpy as np
+    from ..solver import rhs
+    from ..species import is_massless
+    species = [s for s in n.species_names() if not is_massless(s)]
+    if len(species) <= LARGE_NETWORK:
+        return
+    f = rhs(n, species, thermo)
+    y0 = np.array([z.get_abundance(s) for s in species])
+    t0 = time.perf_counter()
+    f(0.0, y0)
+    one = time.perf_counter() - t0
+    print(f"evolve-zone: warning: the network has {len(species)} species and "
+          f"{len(n.reactions.reactions)} reactions. One evaluation of the "
+          f"right-hand side takes {one:.2g} s here, and a stiff integration "
+          f"needs thousands, so this can run for hours. NucNetPy suits networks "
+          f"of up to a few hundred species: cut this one with --zmax and --amax.",
+          file=sys.stderr, flush=True)
+
+
 def cmd_evolve(args):
+    from ..network_limiter import limit_network, select_species
     n = _load(args.xml); z = n.zone(args.zone_index)
+    if args.zmax is not None or args.amax is not None:
+        # Keep the nuclides inside the cut and the reactions among them;
+        # photons and leptons stay, so photodisintegrations and decays survive.
+        limit_network(n, select_species(n, zmax=args.zmax, amax=args.amax))
     times = time_grid(args.t0, args.t1, args.steps, args.log_time)
-    res = evolve_zone(n, z, times, thermo=constant_thermo(args.t9 or z.temperature9(), args.rho or z.density()), method=args.method)
+    thermo = constant_thermo(args.t9 or z.temperature9(), args.rho or z.density())
+    _warn_if_large(n, z, thermo)
+    progress = _Progress(times, args.progress) if args.progress > 0 else None
+    res = evolve_zone(n, z, times, thermo=thermo, method=args.method,
+                      rtol=args.rtol, atol=args.atol, progress=progress)
     # A failed solve still carries a full abundance vector, and a positivity
     # projection that had to invent baryon number also reports failure here.
     # Printing the numbers without the verdict would make either look like an
@@ -280,7 +357,13 @@ def build_parser():
     s = sub.add_parser('export-zone-xml'); add_xml(s); s.add_argument('output'); s.add_argument('--zone-index', type=int, default=0); s.set_defaults(func=cmd_export_zone_xml)
     s = sub.add_parser('reactions-latex'); add_xml(s); s.add_argument('output'); s.set_defaults(func=cmd_reactions_latex)
     s = sub.add_parser('species-history'); add_xml(s); s.add_argument('species'); s.set_defaults(func=cmd_species_history)
-    s = sub.add_parser('evolve-zone'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t0', type=float, default=0.0); s.add_argument('--t1', type=float, default=1.0); s.add_argument('--steps', type=int, default=50); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--method', default='bdf', type=str.lower, choices=METHODS); s.add_argument('--log-time', action='store_true'); s.add_argument('--min-abundance', type=float, default=0.0); s.set_defaults(func=cmd_evolve)
+    s = sub.add_parser('evolve-zone'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t0', type=float, default=0.0); s.add_argument('--t1', type=float, default=1.0); s.add_argument('--steps', type=int, default=50); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--method', default='bdf', type=str.lower, choices=METHODS); s.add_argument('--log-time', action='store_true'); s.add_argument('--min-abundance', type=float, default=0.0)
+    s.add_argument('--zmax', type=int, help='keep only nuclides with Z <= ZMAX, and the reactions among them')
+    s.add_argument('--amax', type=int, help='keep only nuclides with A <= AMAX, and the reactions among them')
+    s.add_argument('--rtol', type=float, default=1e-6, help='relative tolerance of the SciPy integrators (default 1e-6)')
+    s.add_argument('--atol', type=float, default=1e-30, help='absolute tolerance on the abundances (default 1e-30, which makes the relative tolerance govern every abundance; 1e-12 is often enough and much faster)')
+    s.add_argument('--progress', type=float, default=30.0, metavar='SECONDS', help='report progress on standard error every SECONDS of computing time (default 30; 0 turns it off)')
+    s.set_defaults(func=cmd_evolve)
     s = sub.add_parser('energy-generation'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.set_defaults(func=cmd_energy)
     s = sub.add_parser('net-dot'); add_xml(s); s.add_argument('-o','--output'); s.add_argument('--t9', type=float, default=1.0); s.add_argument('--rho', type=float, default=1.0); s.add_argument('--min-rate', type=float, default=0.0); s.set_defaults(func=cmd_dot)
     s = sub.add_parser('validate'); add_xml(s); s.add_argument('--strict', action='store_true'); s.add_argument('--max', type=int, default=50); s.add_argument('--max-zones', type=int, default=10); s.set_defaults(func=cmd_validate)

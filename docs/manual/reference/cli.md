@@ -322,6 +322,8 @@ usage: nucnetpy evolve-zone [-h] [--zone-index ZONE_INDEX] [--t0 T0] [--t1 T1]
                             [--steps STEPS] [--t9 T9] [--rho RHO]
                             [--method {bdf,radau,lsoda,rk45,dop853,adaptive_implicit_euler,rk4,euler,implicit_euler,backward_euler}]
                             [--log-time] [--min-abundance MIN_ABUNDANCE]
+                            [--zmax ZMAX] [--amax AMAX] [--rtol RTOL]
+                            [--atol ATOL] [--progress SECONDS]
                             xml
 
 positional arguments:
@@ -338,6 +340,17 @@ options:
   --method {bdf,radau,lsoda,rk45,dop853,adaptive_implicit_euler,rk4,euler,implicit_euler,backward_euler}
   --log-time
   --min-abundance MIN_ABUNDANCE
+  --zmax ZMAX           keep only nuclides with Z <= ZMAX, and the reactions
+                        among them
+  --amax AMAX           keep only nuclides with A <= AMAX, and the reactions
+                        among them
+  --rtol RTOL           relative tolerance of the SciPy integrators (default
+                        1e-6)
+  --atol ATOL           absolute tolerance on the abundances (default 1e-30,
+                        which makes the relative tolerance govern every
+                        abundance; 1e-12 is often enough and much faster)
+  --progress SECONDS    report progress on standard error every SECONDS of
+                        computing time (default 30; 0 turns it off)
 ```
 
 ## `energy-generation`
