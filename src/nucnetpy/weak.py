@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 import numpy as np
 from .species import normalize_species_name
 
@@ -36,20 +36,25 @@ class WeakRateTable:
         x = np.log(np.clip(self.t9, 1e-99, None))
         y = np.log(np.clip(self.rho_ye, 1e-99, None))
         z = np.log(np.clip(values, 1e-300, None)) if log_values else np.asarray(values, dtype=float)
-        lx = np.log(max(t9, 1e-99)); ly = np.log(max(rho_ye, 1e-99))
+        lx = np.log(max(t9, 1e-99))
+        ly = np.log(max(rho_ye, 1e-99))
         if len(x) == 1 and len(y) == 1:
             val = z[0, 0]
         elif len(x) == 1:
-            iy = np.searchsorted(y, ly) - 1; iy = max(0, min(iy, len(y)-2))
+            iy = np.searchsorted(y, ly) - 1
+            iy = max(0, min(iy, len(y)-2))
             ty = (ly-y[iy]) / max(y[iy+1]-y[iy], 1e-99)
             val = (1-ty)*z[0,iy] + ty*z[0,iy+1]
         elif len(y) == 1:
-            ix = np.searchsorted(x, lx) - 1; ix = max(0, min(ix, len(x)-2))
+            ix = np.searchsorted(x, lx) - 1
+            ix = max(0, min(ix, len(x)-2))
             tx = (lx-x[ix]) / max(x[ix+1]-x[ix], 1e-99)
             val = (1-tx)*z[ix,0] + tx*z[ix+1,0]
         else:
-            ix = np.searchsorted(x, lx) - 1; iy = np.searchsorted(y, ly) - 1
-            ix = max(0, min(ix, len(x)-2)); iy = max(0, min(iy, len(y)-2))
+            ix = np.searchsorted(x, lx) - 1
+            iy = np.searchsorted(y, ly) - 1
+            ix = max(0, min(ix, len(x)-2))
+            iy = max(0, min(iy, len(y)-2))
             tx = (lx - x[ix]) / max(x[ix+1] - x[ix], 1e-99)
             ty = (ly - y[iy]) / max(y[iy+1] - y[iy], 1e-99)
             val = (1-tx)*(1-ty)*z[ix,iy] + tx*(1-ty)*z[ix+1,iy] + (1-tx)*ty*z[ix,iy+1] + tx*ty*z[ix+1,iy+1]
@@ -91,8 +96,10 @@ def read_weak_table(path: str | Path, parent: Optional[str] = None, daughter: Op
         toks = s.replace(',', ' ').split()
         vals = []
         for tok in toks[:4]:
-            try: vals.append(float(tok))
-            except Exception: pass
+            try:
+                vals.append(float(tok))
+            except Exception:
+                pass
         if len(vals) >= 3:
             rows.append(vals)
     if not rows:
@@ -102,12 +109,15 @@ def read_weak_table(path: str | Path, parent: Optional[str] = None, daughter: Op
     if not parent or not daughter:
         raise ValueError("parent and daughter must be supplied or present in a header")
     arr = np.asarray(rows, dtype=float)
-    t9 = np.unique(arr[:,0]); rho = np.unique(arr[:,1])
+    t9 = np.unique(arr[:,0])
+    rho = np.unique(arr[:,1])
     rates = np.zeros((len(t9), len(rho)))
     nuloss = np.zeros_like(rates) if arr.shape[1] >= 4 else None
-    ti = {v:i for i,v in enumerate(t9)}; ri = {v:i for i,v in enumerate(rho)}
+    ti = {v:i for i,v in enumerate(t9)}
+    ri = {v:i for i,v in enumerate(rho)}
     for row in arr:
-        i = ti[row[0]]; j = ri[row[1]]
+        i = ti[row[0]]
+        j = ri[row[1]]
         rates[i,j] = row[2]
         if nuloss is not None and len(row) >= 4:
             nuloss[i,j] = row[3]

@@ -1,10 +1,21 @@
 from __future__ import annotations
-import argparse, sys
+import argparse
+import sys
 from pathlib import Path
 
 from ..io.xml import read_xml, write_xml
 from ..io.jina import read_jina_xml, combine_jina_xml, jina_database_summary
-from ..analysis import largest_mass_fractions, species_history, flows, ydot, element_abundances, abundance_moment, energy_generation_rate, compare_rates, charge_changing_flows, system_timescales, entropy_generation_rate
+from ..analysis import (
+    charge_changing_flows,
+    element_abundances,
+    energy_generation_rate,
+    entropy_generation_rate,
+    flows,
+    largest_mass_fractions,
+    species_history,
+    system_timescales,
+    ydot,
+)
 from ..detailed_balance import net_flows as detailed_net_flows
 from ..solver import evolve_zone, constant_thermo, time_grid, METHODS
 from ..graph import reaction_network_dot
@@ -47,49 +58,61 @@ def cmd_print_output(args):
 
 
 def cmd_largest_x(args):
-    n = _load(args.xml); z = n.zone(args.zone_index)
+    n = _load(args.xml)
+    z = n.zone(args.zone_index)
     for name, x in largest_mass_fractions(z, n.species, args.n, args.min_x):
         print(f"{name:8s} {x:.12e}")
 
 
 def cmd_zone_abundances(args):
-    n = _load(args.xml); z = n.zone(args.zone_index)
+    n = _load(args.xml)
+    z = n.zone(args.zone_index)
     for name, y in sorted(z.abundances.items()):
-        if y >= args.min_abundance: print(f"{name} {y:.12e}")
+        if y >= args.min_abundance:
+            print(f"{name} {y:.12e}")
 
 
 def cmd_zone_properties(args):
-    n = _load(args.xml); z = n.zone(args.zone_index)
-    for k, v in sorted(_properties(z).items()): print(k, v)
+    n = _load(args.xml)
+    z = n.zone(args.zone_index)
+    for k, v in sorted(_properties(z).items()):
+        print(k, v)
 
 
 def cmd_element(args):
-    n = _load(args.xml); z = n.zone(args.zone_index)
+    n = _load(args.xml)
+    z = n.zone(args.zone_index)
     for el, y in element_abundances(z, n.species).items():
-        if el == args.element.lower() or args.element == '*': print(el, y)
+        if el == args.element.lower() or args.element == '*':
+            print(el, y)
 
 
 def cmd_rates(args):
     n = _load(args.xml)
     for r, val in n.reactions.rates(args.t9, args.rho).items():
-        if val >= args.min_rate: print(f"{r:60s} {val:.12e}")
+        if val >= args.min_rate:
+            print(f"{r:60s} {val:.12e}")
 
 
 def cmd_flows(args):
     n = _load(args.xml)
     for r, val in flows(n, args.zone_index, args.t9, args.rho).items():
-        if val >= args.min_flow: print(f"{r:60s} {val:.12e}")
+        if val >= args.min_flow:
+            print(f"{r:60s} {val:.12e}")
 
 
 def cmd_ydot(args):
     n = _load(args.xml)
     for s, val in sorted(ydot(n, args.zone_index, args.t9, args.rho).items()):
-        if abs(val) >= args.min_abs: print(f"{s:8s} {val:.12e}")
+        if abs(val) >= args.min_abs:
+            print(f"{s:8s} {val:.12e}")
 
 
 def cmd_net_flows(args):
-    n = _load(args.xml); z = n.zone(args.zone_index)
-    t9 = args.t9 or z.temperature9(); rho = args.rho or z.density()
+    n = _load(args.xml)
+    z = n.zone(args.zone_index)
+    t9 = args.t9 or z.temperature9()
+    rho = args.rho or z.density()
     for r, (f, rev, net) in detailed_net_flows(n, z.abundances, t9=t9, rho=rho).items():
         if max(abs(f), abs(rev)) >= args.min_flow:
             print(f"{r:60s} fwd={f:.6e} rev={rev:.6e} net={net:.6e}")
@@ -99,7 +122,8 @@ def cmd_charge_flows(args):
     n = _load(args.xml)
     contributions = charge_changing_flows(n, args.zone_index, args.t9, args.rho)
     for r, val in sorted(contributions.items(), key=lambda kv: -abs(kv[1])):
-        if abs(val) >= args.min_flow: print(f"{r:60s} {val:.12e}")
+        if abs(val) >= args.min_flow:
+            print(f"{r:60s} {val:.12e}")
     print(f"dYe/dt {sum(contributions.values()):.12e}")
 
 
@@ -125,20 +149,26 @@ def cmd_conservation(args):
 
 
 def cmd_remove_duplicates(args):
-    n = _load(args.xml); before = len(n.reactions.reactions)
-    n.reactions.remove_duplicates(); write_xml(n, args.output)
+    n = _load(args.xml)
+    before = len(n.reactions.reactions)
+    n.reactions.remove_duplicates()
+    write_xml(n, args.output)
     print(f"removed {before - len(n.reactions.reactions)} duplicate reactions")
 
 
 def cmd_remove_invalid(args):
-    n = _load(args.xml); before = len(n.reactions.reactions)
-    n.reactions.filter_valid(n.species); write_xml(n, args.output)
+    n = _load(args.xml)
+    before = len(n.reactions.reactions)
+    n.reactions.filter_valid(n.species)
+    write_xml(n, args.output)
     print(f"removed {before - len(n.reactions.reactions)} invalid reactions")
 
 
 def cmd_export_zone_xml(args):
-    n = _load(args.xml); out = type(n)()
-    out.species = n.species; out.reactions = n.reactions
+    n = _load(args.xml)
+    out = type(n)()
+    out.species = n.species
+    out.reactions = n.reactions
     out.zones = [n.zone(args.zone_index)]
     write_xml(out, args.output)
 
@@ -154,7 +184,8 @@ def cmd_reactions_latex(args):
 
 def cmd_species_history(args):
     n = _load(args.xml)
-    for i, label, y in species_history(n, args.species): print(i, '|'.join(label), f"{y:.12e}")
+    for i, label, y in species_history(n, args.species):
+        print(i, '|'.join(label), f"{y:.12e}")
 
 
 #: Above this many species ``evolve-zone`` warns that the integration may be
@@ -227,7 +258,8 @@ def _warn_if_large(n, z, thermo) -> None:
 
 def cmd_evolve(args):
     from ..network_limiter import limit_network, select_species
-    n = _load(args.xml); z = n.zone(args.zone_index)
+    n = _load(args.xml)
+    z = n.zone(args.zone_index)
     if args.zmax is not None or args.amax is not None:
         # Keep the nuclides inside the cut and the reactions among them;
         # photons and leptons stay, so photodisintegrations and decays survive.
@@ -246,7 +278,8 @@ def cmd_evolve(args):
     if not res.success:
         print(f"error: {res.message}", file=sys.stderr)
     for s, y in sorted(res.final_abundances.items()):
-        if y >= args.min_abundance: print(s, f"{y:.12e}")
+        if y >= args.min_abundance:
+            print(s, f"{y:.12e}")
     return 0 if res.success else 1
 
 
@@ -267,15 +300,16 @@ def cmd_energy(args):
 def cmd_dot(args):
     n = _load(args.xml)
     dot = reaction_network_dot(n, min_rate=args.min_rate, t9=args.t9, rho=args.rho)
-    if args.output: Path(args.output).write_text(dot)
-    else: print(dot)
-
+    if args.output:
+        Path(args.output).write_text(dot)
+    else:
+        print(dot)
 
 
 def cmd_validate(args):
     n = _load(args.xml)
     issues = validate_network(n, strict=args.strict)
-    for i, z in enumerate(n.zones[:args.max_zones]):
+    for z in n.zones[:args.max_zones]:
         issues.extend(validate_zone(z, n))
     print(f"issues {len(issues)}")
     for issue in issues[:args.max]:
@@ -334,54 +368,160 @@ def cmd_jina_combine(args):
     print(f"reactions: {len(n.reactions.reactions)}")
     print(f"zones: {len(n.zones)}")
 
+
 def build_parser():
     p = argparse.ArgumentParser(prog='nucnetpy', description='Pure-Python NucNet Tools replacement commands')
     sub = p.add_subparsers(dest='cmd', required=True)
-    def add_xml(sp): sp.add_argument('xml')
-    s = sub.add_parser('summary'); add_xml(s); s.set_defaults(func=cmd_summary)
-    s = sub.add_parser('print-output'); add_xml(s); s.add_argument('--max-zones', type=int, default=3); s.add_argument('--min-abundance', type=float, default=0.0); s.set_defaults(func=cmd_print_output)
-    s = sub.add_parser('largest-x'); add_xml(s); s.add_argument('-n', type=int, default=10); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--min-x', type=float, default=0.0); s.set_defaults(func=cmd_largest_x)
-    s = sub.add_parser('zone-abundances'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--min-abundance', type=float, default=0.0); s.set_defaults(func=cmd_zone_abundances)
-    s = sub.add_parser('zone-properties'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.set_defaults(func=cmd_zone_properties)
-    s = sub.add_parser('element-abundances'); add_xml(s); s.add_argument('element'); s.add_argument('--zone-index', type=int, default=0); s.set_defaults(func=cmd_element)
-    s = sub.add_parser('rates'); add_xml(s); s.add_argument('--t9', type=float, default=1.0); s.add_argument('--rho', type=float, default=1.0); s.add_argument('--min-rate', type=float, default=0.0); s.set_defaults(func=cmd_rates)
-    s = sub.add_parser('flows'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--min-flow', type=float, default=0.0); s.set_defaults(func=cmd_flows)
-    s = sub.add_parser('ydot'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--min-abs', type=float, default=0.0); s.set_defaults(func=cmd_ydot)
-    s = sub.add_parser('net-flows', help='forward, detailed-balance reverse, and net fluxes'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--min-flow', type=float, default=0.0); s.set_defaults(func=cmd_net_flows)
-    s = sub.add_parser('charge-flows', help='per-reaction dYe/dt contributions'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--min-flow', type=float, default=0.0); s.set_defaults(func=cmd_charge_flows)
-    s = sub.add_parser('timescales', help='shortest species timescales Y/|dY/dt|'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('-n', type=int, default=20); s.set_defaults(func=cmd_timescales)
-    s = sub.add_parser('entropy-generation', help='dS/dt per nucleon in k_B/s'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.set_defaults(func=cmd_entropy)
-    s = sub.add_parser('conservation'); add_xml(s); s.add_argument('--max', type=int, default=20); s.set_defaults(func=cmd_conservation)
-    s = sub.add_parser('remove-duplicates'); add_xml(s); s.add_argument('output'); s.set_defaults(func=cmd_remove_duplicates)
-    s = sub.add_parser('remove-invalid'); add_xml(s); s.add_argument('output'); s.set_defaults(func=cmd_remove_invalid)
-    s = sub.add_parser('export-zone-xml'); add_xml(s); s.add_argument('output'); s.add_argument('--zone-index', type=int, default=0); s.set_defaults(func=cmd_export_zone_xml)
-    s = sub.add_parser('reactions-latex'); add_xml(s); s.add_argument('output'); s.set_defaults(func=cmd_reactions_latex)
-    s = sub.add_parser('species-history'); add_xml(s); s.add_argument('species'); s.set_defaults(func=cmd_species_history)
-    s = sub.add_parser('evolve-zone'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t0', type=float, default=0.0); s.add_argument('--t1', type=float, default=1.0); s.add_argument('--steps', type=int, default=50); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.add_argument('--method', default='bdf', type=str.lower, choices=METHODS); s.add_argument('--log-time', action='store_true'); s.add_argument('--min-abundance', type=float, default=0.0)
+
+    def command(name, func, help):
+        """Add a command that reads one network XML file, given first."""
+        s = sub.add_parser(name, help=help, description=help)
+        s.add_argument('xml', help='network XML file')
+        s.set_defaults(func=func)
+        return s
+
+    def zone_and_conditions(s):
+        """Options shared by the commands that evaluate one zone of the network."""
+        s.add_argument('--zone-index', type=int, default=0)
+        s.add_argument('--t9', type=float)
+        s.add_argument('--rho', type=float)
+
+    # Inspecting a network and its zones
+    command('summary', cmd_summary, 'count the species, reactions and zones, and check the network')
+
+    s = command('print-output', cmd_print_output, 'print the properties and abundances of each zone')
+    s.add_argument('--max-zones', type=int, default=3)
+    s.add_argument('--min-abundance', type=float, default=0.0)
+
+    s = command('largest-x', cmd_largest_x, 'list the largest mass fractions in a zone')
+    s.add_argument('-n', type=int, default=10)
+    s.add_argument('--zone-index', type=int, default=0)
+    s.add_argument('--min-x', type=float, default=0.0)
+
+    s = command('zone-abundances', cmd_zone_abundances, 'list the abundances in a zone')
+    s.add_argument('--zone-index', type=int, default=0)
+    s.add_argument('--min-abundance', type=float, default=0.0)
+
+    s = command('zone-properties', cmd_zone_properties, 'list the properties of a zone')
+    s.add_argument('--zone-index', type=int, default=0)
+
+    s = command('element-abundances', cmd_element, 'list the abundances in a zone summed by element')
+    s.add_argument('element', help="element symbol, such as fe; '*' lists every element")
+    s.add_argument('--zone-index', type=int, default=0)
+
+    # Rates, flows and derived quantities
+    s = command('rates', cmd_rates, 'list the rate of every reaction at a given T9 and rho')
+    s.add_argument('--t9', type=float, default=1.0)
+    s.add_argument('--rho', type=float, default=1.0)
+    s.add_argument('--min-rate', type=float, default=0.0)
+
+    s = command('flows', cmd_flows, 'list the reaction flows in a zone')
+    zone_and_conditions(s)
+    s.add_argument('--min-flow', type=float, default=0.0)
+
+    s = command('ydot', cmd_ydot, 'list dY/dt for every species in a zone')
+    zone_and_conditions(s)
+    s.add_argument('--min-abs', type=float, default=0.0)
+
+    s = command('net-flows', cmd_net_flows, 'list the forward, detailed-balance reverse and net flows in a zone')
+    zone_and_conditions(s)
+    s.add_argument('--min-flow', type=float, default=0.0)
+
+    s = command('charge-flows', cmd_charge_flows, "list each reaction's contribution to dYe/dt in a zone")
+    zone_and_conditions(s)
+    s.add_argument('--min-flow', type=float, default=0.0)
+
+    s = command('timescales', cmd_timescales, 'list the shortest species timescales, Y/|dY/dt|, in a zone')
+    zone_and_conditions(s)
+    s.add_argument('-n', type=int, default=20)
+
+    s = command('entropy-generation', cmd_entropy, 'print the entropy generation rate of a zone, dS/dt per nucleon in k_B/s')
+    zone_and_conditions(s)
+
+    # Checking and editing a reaction set
+    s = command('conservation', cmd_conservation, 'list the reactions that do not conserve A and Z')
+    s.add_argument('--max', type=int, default=20)
+
+    s = command('remove-duplicates', cmd_remove_duplicates, 'write a copy of the network without duplicate reactions')
+    s.add_argument('output', help='XML file to write')
+
+    s = command('remove-invalid', cmd_remove_invalid, 'write a copy of the network without the reactions that do not conserve A and Z')
+    s.add_argument('output', help='XML file to write')
+
+    s = command('export-zone-xml', cmd_export_zone_xml, 'write a copy of the network holding only one zone')
+    s.add_argument('output', help='XML file to write')
+    s.add_argument('--zone-index', type=int, default=0)
+
+    s = command('reactions-latex', cmd_reactions_latex, 'write the reactions and their Q values as a LaTeX table')
+    s.add_argument('output', help='LaTeX file to write')
+
+    s = command('species-history', cmd_species_history, 'list the abundance of one species in every zone')
+    s.add_argument('species', help='species name, such as fe56')
+
+    # Evolution
+    s = command('evolve-zone', cmd_evolve, 'integrate a zone in time at constant T9 and rho')
+    s.add_argument('--zone-index', type=int, default=0)
+    s.add_argument('--t0', type=float, default=0.0)
+    s.add_argument('--t1', type=float, default=1.0)
+    s.add_argument('--steps', type=int, default=50)
+    s.add_argument('--t9', type=float)
+    s.add_argument('--rho', type=float)
+    s.add_argument('--method', default='bdf', type=str.lower, choices=METHODS)
+    s.add_argument('--log-time', action='store_true')
+    s.add_argument('--min-abundance', type=float, default=0.0)
     s.add_argument('--zmax', type=int, help='keep only nuclides with Z <= ZMAX, and the reactions among them')
     s.add_argument('--amax', type=int, help='keep only nuclides with A <= AMAX, and the reactions among them')
     s.add_argument('--rtol', type=float, default=1e-6, help='relative tolerance of the SciPy integrators (default 1e-6)')
     s.add_argument('--atol', type=float, default=1e-30, help='absolute tolerance on the abundances (default 1e-30, which makes the relative tolerance govern every abundance; 1e-12 is often enough and much faster)')
     s.add_argument('--progress', type=float, default=30.0, metavar='SECONDS', help='report progress on standard error every SECONDS of computing time (default 30; 0 turns it off)')
-    s.set_defaults(func=cmd_evolve)
-    s = sub.add_parser('energy-generation'); add_xml(s); s.add_argument('--zone-index', type=int, default=0); s.add_argument('--t9', type=float); s.add_argument('--rho', type=float); s.set_defaults(func=cmd_energy)
-    s = sub.add_parser('net-dot'); add_xml(s); s.add_argument('-o','--output'); s.add_argument('--t9', type=float, default=1.0); s.add_argument('--rho', type=float, default=1.0); s.add_argument('--min-rate', type=float, default=0.0); s.set_defaults(func=cmd_dot)
-    s = sub.add_parser('validate'); add_xml(s); s.add_argument('--strict', action='store_true'); s.add_argument('--max', type=int, default=50); s.add_argument('--max-zones', type=int, default=10); s.set_defaults(func=cmd_validate)
-    s = sub.add_parser('nse'); add_xml(s); s.add_argument('--t9', type=float, required=True); s.add_argument('--rho', type=float, required=True); s.add_argument('--ye', type=float, required=True); s.add_argument('--coulomb', action='store_true', help='apply Bravo & Garcia-Senz Coulomb corrections'); s.add_argument('--min-abundance', type=float, default=0.0); s.add_argument('--min-x', type=float, default=0.0); s.set_defaults(func=cmd_nse)
-    s = sub.add_parser('qse', help='constrained cluster equilibrium (libnuceq)'); add_xml(s); s.add_argument('--t9', type=float, required=True); s.add_argument('--rho', type=float, required=True); s.add_argument('--ye', type=float, required=True); s.add_argument('--cluster', action='append', metavar='SP1,SP2,...:Y', help='cluster species and constrained total abundance; repeatable'); s.add_argument('--coulomb', action='store_true'); s.add_argument('--min-abundance', type=float, default=0.0); s.add_argument('--min-x', type=float, default=0.0); s.set_defaults(func=cmd_qse)
 
-    s = sub.add_parser('jina-summary', help='summarise separate JINA nuclide and reaction XML files')
-    s.add_argument('nuclides_xml')
-    s.add_argument('reactions_xml')
+    s = command('energy-generation', cmd_energy, 'print the nuclear energy generation rate of a zone, in erg/g/s')
+    zone_and_conditions(s)
+
+    s = command('net-dot', cmd_dot, 'write the network as a Graphviz DOT graph')
+    s.add_argument('-o', '--output')
+    s.add_argument('--t9', type=float, default=1.0)
+    s.add_argument('--rho', type=float, default=1.0)
+    s.add_argument('--min-rate', type=float, default=0.0)
+
+    s = command('validate', cmd_validate, 'check the network and its zones for problems')
+    s.add_argument('--strict', action='store_true')
+    s.add_argument('--max', type=int, default=50)
+    s.add_argument('--max-zones', type=int, default=10)
+
+    # Equilibrium
+    s = command('nse', cmd_nse, 'solve for nuclear statistical equilibrium')
+    s.add_argument('--t9', type=float, required=True)
+    s.add_argument('--rho', type=float, required=True)
+    s.add_argument('--ye', type=float, required=True)
+    s.add_argument('--coulomb', action='store_true', help='apply Bravo & Garcia-Senz Coulomb corrections')
+    s.add_argument('--min-abundance', type=float, default=0.0)
+    s.add_argument('--min-x', type=float, default=0.0)
+
+    s = command('qse', cmd_qse, 'solve for constrained cluster equilibrium (libnuceq)')
+    s.add_argument('--t9', type=float, required=True)
+    s.add_argument('--rho', type=float, required=True)
+    s.add_argument('--ye', type=float, required=True)
+    s.add_argument('--cluster', action='append', metavar='SP1,SP2,...:Y', help='cluster species and constrained total abundance; repeatable')
+    s.add_argument('--coulomb', action='store_true')
+    s.add_argument('--min-abundance', type=float, default=0.0)
+    s.add_argument('--min-x', type=float, default=0.0)
+
+    # Separate JINA nuclide, reaction and zone files
+    help = 'summarise separate JINA nuclide and reaction XML files'
+    s = sub.add_parser('jina-summary', help=help, description=help)
+    s.add_argument('nuclides_xml', help='nuclide XML file')
+    s.add_argument('reactions_xml', help='reaction XML file')
     s.add_argument('--zones-xml')
     s.add_argument('--show-invalid', action='store_true')
     s.add_argument('--max-invalid', type=int, default=20)
     s.set_defaults(func=cmd_jina_summary)
 
-    s = sub.add_parser('jina-combine', help='combine JINA nuclide and reaction XML files into one nucnetpy XML file')
-    s.add_argument('nuclides_xml')
-    s.add_argument('reactions_xml')
-    s.add_argument('output_xml')
+    help = 'combine JINA nuclide and reaction XML files into one nucnetpy XML file'
+    s = sub.add_parser('jina-combine', help=help, description=help)
+    s.add_argument('nuclides_xml', help='nuclide XML file')
+    s.add_argument('reactions_xml', help='reaction XML file')
+    s.add_argument('output_xml', help='combined XML file to write')
     s.add_argument('--zones-xml')
     s.set_defaults(func=cmd_jina_combine)
     return p

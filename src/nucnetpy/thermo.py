@@ -390,7 +390,8 @@ def entropy_ideal_ions(rho: float, temperature: float, ytot: float) -> float:
     warnings.warn(_PROXY_WARNING.format(name="entropy_ideal_ions",
                                         replacement="entropy_per_nucleon"),
                   DeprecationWarning, stacklevel=2)
-    rho = max(float(rho), 1e-99); temperature = max(float(temperature), 1e-99)
+    rho = max(float(rho), 1e-99)
+    temperature = max(float(temperature), 1e-99)
     return float(ytot) * (2.5 + math.log((temperature ** 1.5) / rho))
 
 

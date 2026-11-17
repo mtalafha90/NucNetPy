@@ -181,9 +181,9 @@ def uncorrected_reverse_study(base_net, t9: float, rho: float, t_end: float,
     """Repeat the silicon burn with the library reverse rates exactly as fitted.
 
     ReacLib fits each reverse rate with the ground-state spins only and leaves
-    the partition-function ratio to the user.  The readers now apply it; this
-    variant removes it again, which is how versions before the fix evaluated
-    the rates and what the comparison with NSE exposed.
+    the partition-function ratio to the user.  The readers apply it; this
+    variant removes it again, to show what the comparison with NSE reveals
+    when the ratio is left out.
     """
     net = copy.deepcopy(base_net)
     for reaction in net.reactions.reactions:

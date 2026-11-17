@@ -1,4 +1,9 @@
-"""Validate NucNetPy against real JINA/libnucnet XML files.
+"""Check NucNetPy on a production JINA/libnucnet database.
+
+Reads the nuclide, reaction and (optional) zone files and reports the counts,
+the validation summary, the initial zone and the rates of the first ten
+reactions.  Given the output file of a finished calculation, it summarises that
+too.  The report is printed and written to a JSON file.
 
 Usage
 -----
@@ -6,7 +11,7 @@ python validation/validate_real_jina_xml.py \
     --nuclides /path/to/nuclides.xml \
     --reactions /path/to/reaction_data.xml \
     --zone /path/to/zone.xml \
-    --output /path/to/output_Nova_exp.xml
+    --output /path/to/output.xml
 """
 from __future__ import annotations
 
@@ -81,12 +86,13 @@ def summarize(nuclides, reactions, zone=None, output=None, sample_t9=0.2, sample
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--nuclides", required=True)
-    ap.add_argument("--reactions", required=True)
-    ap.add_argument("--zone")
-    ap.add_argument("--output")
-    ap.add_argument("--json", default="real_xml_validation_summary.json")
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--nuclides", required=True, help="nuclide XML file")
+    ap.add_argument("--reactions", required=True, help="reaction XML file")
+    ap.add_argument("--zone", help="zone XML file (optional)")
+    ap.add_argument("--output", help="output XML file of a finished calculation (optional)")
+    ap.add_argument("--json", default="real_xml_validation_summary.json",
+                    help="where to write the report (default: %(default)s)")
     args = ap.parse_args()
     report = summarize(args.nuclides, args.reactions, args.zone, args.output)
     Path(args.json).write_text(json.dumps(report, indent=2))

@@ -6,7 +6,6 @@ full post-to-feature map.
 """
 import math
 
-import numpy as np
 import pytest
 
 from nucnetpy import (

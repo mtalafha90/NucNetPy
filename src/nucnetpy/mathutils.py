@@ -1,6 +1,5 @@
 """Numerical utility routines ported from NucNet Tools helper math code."""
 from __future__ import annotations
-from dataclasses import dataclass
 from typing import Sequence, Tuple
 import numpy as np
 
@@ -31,13 +30,17 @@ def bilinear_interpolation(x1: Sequence[float], x2: Sequence[float], matrix, v1:
     Returns ``(value, max_corner_difference)`` and raises if outside the table,
     following the C++ routine that exits on out-of-range input.
     """
-    x1 = np.asarray(x1, dtype=float); x2 = np.asarray(x2, dtype=float)
+    x1 = np.asarray(x1, dtype=float)
+    x2 = np.asarray(x2, dtype=float)
     m = np.asarray(matrix, dtype=float)
     if not (x1[0] <= v1 <= x1[-1]) or not (x2[0] <= v2 <= x2[-1]):
         raise ValueError("interpolation point outside table")
     j = min(max(int(np.searchsorted(x1, v1, side="right") - 1), 0), len(x1)-2)
     k = min(max(int(np.searchsorted(x2, v2, side="right") - 1), 0), len(x2)-2)
-    y1 = m[j, k]; y2 = m[j+1, k]; y3 = m[j+1, k+1]; y4 = m[j, k+1]
+    y1 = m[j, k]
+    y2 = m[j+1, k]
+    y3 = m[j+1, k+1]
+    y4 = m[j, k+1]
     t = (v1 - x1[j]) / (x1[j+1] - x1[j])
     u = (v2 - x2[k]) / (x2[k+1] - x2[k])
     val = (1-t)*(1-u)*y1 + t*(1-u)*y2 + t*u*y3 + (1-t)*u*y4
@@ -52,10 +55,12 @@ def two_d_interpolation(x1: Sequence[float], x2: Sequence[float], matrix, v1: fl
     the table, extrapolate/clamp on edges, and report ``9999`` as uncertainty
     when the requested point lies outside the available grid.
     """
-    x1 = np.asarray(x1, dtype=float); x2 = np.asarray(x2, dtype=float)
+    x1 = np.asarray(x1, dtype=float)
+    x2 = np.asarray(x2, dtype=float)
     m = np.asarray(matrix, dtype=float)
     outside = v1 < x1[0] or v1 > x1[-1] or v2 < x2[0] or v2 > x2[-1]
-    vv1 = float(np.clip(v1, x1[0], x1[-1])); vv2 = float(np.clip(v2, x2[0], x2[-1]))
+    vv1 = float(np.clip(v1, x1[0], x1[-1]))
+    vv2 = float(np.clip(v2, x2[0], x2[-1]))
     if len(x1) == 1 and len(x2) == 1:
         return float(m[0,0]), OUT_OF_TABLE_DIFF if outside else 0.0
     if len(x1) == 1:

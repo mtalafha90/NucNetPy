@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from nucnetpy.core import Network, Zone
+from nucnetpy.core import Network
 from nucnetpy.detailed_balance import (_q_value, apply_reverse_partition_functions,
                                        consistent_reverse_network, reverse_rate)
 from nucnetpy.io.xml import read_xml, write_xml
@@ -192,8 +192,8 @@ def _unbound_capture_pair(capture_label="", reverse_label=""):
 
 
 def test_photodisintegration_is_the_derived_member_even_when_exothermic():
-    # The photodisintegration has the higher a1 here, so the old rule (the
-    # endothermic member is the derived one) corrected the capture instead.
+    # The photodisintegration has the higher a1 here, so taking the
+    # endothermic member as the derived one would correct the capture instead.
     net, capture, reverse = _unbound_capture_pair()
     assert apply_reverse_partition_functions(net) == [reverse]
     assert capture.partition_ratio is None

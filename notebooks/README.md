@@ -54,7 +54,7 @@ because neither announces itself with an error message.
 
 **Cutting a network keeps its photodisintegrations.** `limit_network` keeps
 every reaction whose nuclides all survive the cut; photons and leptons never
-decide the outcome, so listing `"gamma"` is harmless but no longer needed:
+decide the outcome, so listing `"gamma"` is harmless but not needed:
 
 ```python
 limit_network(net, select_species(net, zmax=20, amax=44))

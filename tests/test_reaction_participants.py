@@ -1,8 +1,8 @@
-"""Regression tests for issues found by running real JINA/libnucnet data.
+"""Tests drawn from running real JINA/libnucnet data.
 
-Each test here pins behaviour that was previously wrong and that silently
-produced a plausible-looking but incorrect answer, which is the failure mode
-that matters most for a scientific library.
+Each test here pins behaviour that, if it went wrong, would silently produce a
+plausible-looking but incorrect answer, which is the failure mode that matters
+most for a scientific library.
 """
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ import pytest
 
 from nucnetpy import (Network, RateFit, Reaction, Species, Zone, analytic_jacobian,
                       evolve_zone, constant_thermo, jacobian, solve_nse, time_grid)
-from nucnetpy.solver import rhs
 
 
 def _photodisintegration_network():
@@ -90,7 +89,7 @@ def test_beta_decay_conserves_charge_without_leptons_in_the_species_map():
 
 @pytest.mark.parametrize("method", ["bdf", "radau", "lsoda"])
 def test_stiff_solvers_are_dispatched_to_scipy(method):
-    """Radau was previously passed to SciPy as 'RADAU' and silently rejected."""
+    """Each method reaches SciPy under the name SciPy accepts ('Radau', not 'RADAU')."""
     net = _photodisintegration_network()
     zone = Zone(abundances={"o16": 1.0 / 16.0})
     net.add_zone(zone)
@@ -180,7 +179,7 @@ def test_nse_excludes_species_without_nuclear_data():
     assert "li5" not in guarded.abundances
     assert guarded.xsum == pytest.approx(1.0, rel=1e-6)
 
-    # Opting in restores the old behaviour, and shows why it is not the default.
+    # Switching the guard off shows why it is on by default.
     unguarded = solve_nse(net, t9=5.0, rho=1.0e7, ye=0.5, require_nuclear_data=False)
     assert "li5" in unguarded.abundances
     assert 5 * unguarded.abundances["li5"] > 1.0e-3

@@ -1,7 +1,7 @@
 """Golden-output numerical-identity tests.
 
-These tests implement the validation order recommended in
-``docs/PURE_PYTHON_PORT_STATUS.md``:
+These tests make the comparisons described in
+``docs/EXACT_NUMERICAL_IDENTITY.md``, in this order:
 
 1. XML round-trip tests,
 2. rate-by-rate ReacLib comparisons on a T9 grid,

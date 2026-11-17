@@ -50,10 +50,11 @@ available, but what it tests depends on where the reverse rates came from, and
 the two cases are worth keeping apart.
 
 With the library's own reverse fits the two sides share no numerical input, so
-a disagreement is informative. It exposed reverse rates evaluated without their
-partition functions, a defect now fixed (see {doc}`pitfalls` on reverse rates);
-what remains, about 0.3 per cent on the alpha chain at $T_9=5$, measures the
-library's Q values and fits against the nuclide file.
+a disagreement is informative. It shows at once whether the reverse rates carry
+their partition functions (see {doc}`pitfalls` on reverse rates): without them
+the two differ by a median 4.5 per cent on the alpha chain at $T_9=5$. What
+remains with them, about 0.3 per cent, measures the library's Q values and fits
+against the nuclide file.
 
 With reverse rates rebuilt by `consistent_reverse_network` the two sides are no
 longer independent: the reverse rates are derived from the same equilibrium

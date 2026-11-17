@@ -33,6 +33,9 @@ identifiers:
     value: 10.5281/zenodo.20756797
     description: Zenodo archive of NucNetPy, all versions (resolves to the latest)
   - type: doi
+    value: 10.5281/zenodo.24323777
+    description: Zenodo archive of NucNetPy 1.1.1
+  - type: doi
     value: 10.5281/zenodo.24152490
     description: Zenodo archive of NucNetPy 1.1.0
   - type: doi

@@ -4,6 +4,7 @@
 
 include LICENSE
 include CITATION.cff
+include CHANGELOG.md
 include README.md
 include pyproject.toml
 
