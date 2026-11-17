@@ -21,22 +21,23 @@ make -C docs/manual all      # html, singlehtml and pdf
 
 The PDF is produced by rinohtype and needs no LaTeX installation.
 
-## Developer notes
+## Notes
 
+These notes are also part of the manual.
 
 | Document | Contents |
 |---|---|
-| [BLOG_COVERAGE.md](BLOG_COVERAGE.md) | Map of every NucNet Tools blog workflow to its nucnetpy feature, including the items ported directly from the C++ source (r647) and what remains open |
-| [CONVERSION_MAP.md](CONVERSION_MAP.md) | Original NucNet Tools / libnucnet concept → nucnetpy API mapping |
-| [JINA_XML_WORKFLOW.md](JINA_XML_WORKFLOW.md) | Working with separate JINA nuclide/reaction/zone XML files |
-| [PURE_PYTHON_PORT_STATUS.md](PURE_PYTHON_PORT_STATUS.md) | Port status per C++ area and the golden-output numerical-identity test framework |
-| [EXACT_NUMERICAL_IDENTITY.md](EXACT_NUMERICAL_IDENTITY.md) | Notes on achieving strict numerical identity with a specific C++ build |
+| [CONVERSION_MAP.md](CONVERSION_MAP.md) | Where each NucNet Tools / libnucnet concept and source area is found in NucNetPy |
+| [BLOG_COVERAGE.md](BLOG_COVERAGE.md) | Each workflow of the NucNet Tools blog and the NucNetPy feature that covers it, including the routines written from the C++ source |
+| [EXACT_NUMERICAL_IDENTITY.md](EXACT_NUMERICAL_IDENTITY.md) | How to compare NucNetPy with a NucNet Tools build, and the golden-output tests that make the comparison |
+| [JINA_XML_WORKFLOW.md](JINA_XML_WORKFLOW.md) | Working with separate JINA nuclide, reaction and zone XML files |
 
-To validate against a production JINA database of your own, run
-`validation/validate_real_jina_xml.py`; it prints the same summary these notes
-describe and writes a JSON record. Notebook
+To check a production JINA database of your own, run
+`validation/validate_real_jina_xml.py`; it prints a summary of the database and
+writes it to a JSON file. Notebook
 [`08_validate_real_jina_files.ipynb`](../notebooks/08_validate_real_jina_files.ipynb)
 walks through the same check interactively.
 
 The main [README](../README.md) covers installation, quick start, and the CLI.
-Tutorial notebooks live in [`notebooks/`](../notebooks/).
+Tutorial notebooks live in [`notebooks/`](../notebooks/), and the history of
+each release is in [`CHANGELOG.md`](../CHANGELOG.md).

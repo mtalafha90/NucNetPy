@@ -55,7 +55,7 @@ which routines were written by working from named C++ source files.
   the user. The XML readers recognise those rates from their coefficients
   (and from ReacLib's `v` flag when the fit labels carry it) and apply the
   ratio (`apply_reverse_partition_functions()`). Without it the alpha
-  chain at T9=5 relaxed to a composition 4.5% (median) and up to 48% away from
+  chain at T9=5 relaxes to a composition 4.5% (median) and up to 48% away from
   NSE; with it the network matches `solve_nse` to 0.34% (median).
 - **Thermodynamic consistency** — `consistent_reverse_network()` rebuilds every
   reverse rate from detailed balance with the nuclide file's own masses, so the
@@ -115,6 +115,18 @@ pytest -q
 
 **Requirements:** Python ≥ 3.10, `numpy ≥ 1.22`, `scipy ≥ 1.9`. Optional:
 `h5py` (HDF5), `matplotlib` + `networkx` (plots/notebooks), `pytest` (tests).
+
+---
+
+## Documentation
+
+- **User manual:** [`docs/manual/nucnetpy-manual.pdf`](docs/manual/nucnetpy-manual.pdf)
+  covers installation, the object model, the common workflows, the pitfalls,
+  how to verify a calculation, and the full Python and command-line reference.
+- **Tutorials:** the Jupyter notebooks in [`notebooks/`](notebooks/README.md).
+- **Coming from NucNet Tools:** the notes in [`docs/`](docs/README.md) map its
+  concepts, source files and blog workflows onto NucNetPy.
+- **Release history:** [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
@@ -204,13 +216,12 @@ for name, y in sorted(zone.abundances.items()):
 None announces itself with an error message, so all are worth knowing before
 your first production run.
 
-### Keep `gamma` when you cut a network
+### Photons and leptons are not nuclides
 
 `limit_network` keeps every reaction whose nuclides all survive the cut.
 Photons and leptons never decide the outcome, so photodisintegrations among the
 kept nuclides stay, and with them the network's ability to reach equilibrium.
-(Development versions before the 1.0.0 release dropped them unless `"gamma"`
-was listed; listing it is still harmless.)
+Listing `"gamma"` is harmless.
 
 ```python
 from nucnetpy.network_limiter import select_species, limit_network
@@ -448,12 +459,13 @@ See [`notebooks/README.md`](notebooks/README.md) for details.
 NucNetPy/
 ├── pyproject.toml
 ├── README.md                    # this file
+├── CHANGELOG.md                 # changes in each release
 ├── CITATION.cff                 # citation metadata (Zenodo DOI)
-├── docs/                        # conversion maps, port status, blog coverage
+├── docs/                        # user manual (PDF and sources) and notes
 ├── examples/                    # standalone usage scripts
 ├── notebooks/                   # tutorial notebooks (00 ... 09)
 ├── tests/                       # pytest suite + golden-output snapshots
-├── validation/                  # real-JINA-XML validation & golden generator
+├── validation/                  # reference case and the scripts behind the published results
 └── src/nucnetpy/
     ├── core.py                  # Network, Zone containers
     ├── species.py               # Species parsing and Z/A bookkeeping
@@ -476,10 +488,6 @@ NucNetPy/
     └── io/                      # xml.py, jina.py, text.py, hdf5.py
 ```
 
-Documentation beyond this README lives in [`docs/`](docs/README.md), including
-the [blog-workflow coverage map](docs/BLOG_COVERAGE.md) and the
-[port status / numerical-identity plan](docs/PURE_PYTHON_PORT_STATUS.md).
-
 ---
 
 ## Scientific note
@@ -488,19 +496,19 @@ NucNetPy is a pure-Python *replacement path* for NucNet Tools workflows: it read
 the same JINA/libnucnet XML data and performs equivalent network analysis and
 evolution. Exact bitwise agreement with a specific original C++ build is **not**
 guaranteed and requires project-specific regression tests against your own
-nuclear data, screening choice, and solver tolerances. A recommended validation
-order — with the golden-output framework that implements it — is given in
-[`docs/PURE_PYTHON_PORT_STATUS.md`](docs/PURE_PYTHON_PORT_STATUS.md).
+nuclear data, screening choice, and solver tolerances.
+[`docs/EXACT_NUMERICAL_IDENTITY.md`](docs/EXACT_NUMERICAL_IDENTITY.md) describes
+how to make that comparison with the golden-output tests.
 
 The strongest internal evidence the package offers is the silicon-burning
 comparison: integrating a trajectory to its stationary state and comparing with
 a separately solved NSE composition. Read the two cases differently.
 
 With the library's own forward and reverse fits the two sides share no
-numerical input, which is how the comparison exposed reverse rates evaluated
-without their partition functions (a median 4.5 per cent disagreement before
-the fix, 0.34 per cent after). With reverse rates rebuilt from detailed balance
-the agreement reaches a
+numerical input, so the comparison tests the library's reverse rates: the two
+agree to a median 0.34 per cent when the reverse rates carry their partition
+functions, and only to 4.5 per cent when they do not. With reverse rates
+rebuilt from detailed balance the agreement reaches a
 few parts in 10^8, but the reverse rates are then derived from the same
 prefactor `solve_nse` uses, so that number measures how consistently the
 integrator, the stoichiometry and the equilibrium solver treat one shared
@@ -528,9 +536,9 @@ JINA reaction-rate database that provides the nuclear data.
 
 **DOI:** [10.5281/zenodo.20756797](https://doi.org/10.5281/zenodo.20756797)
 (all versions; it always resolves to the latest release). Each release also
-has its own DOI, listed on the Zenodo page: that of 1.1.0 is
-[10.5281/zenodo.24152490](https://doi.org/10.5281/zenodo.24152490), and that
-of 1.0.0 is [10.5281/zenodo.20756798](https://doi.org/10.5281/zenodo.20756798).
+has its own DOI, listed on the Zenodo page and in [`CHANGELOG.md`](CHANGELOG.md):
+that of 1.1.1 is
+[10.5281/zenodo.24323777](https://doi.org/10.5281/zenodo.24323777).
 
 ```bibtex
 @software{nucnetpy,

@@ -1,10 +1,10 @@
 # Pitfalls
 
 Everything in this chapter produces a plausible-looking answer rather than an
-error message. Each item was found by running the package against a production
-database rather than a test network, and each is now covered by a regression
-test — but the underlying trap belongs to the problem, not to this
-implementation, so it is worth knowing whichever code you use.
+error message. Each item shows up with a production database rather than a
+test network. NucNetPy guards against each one, and the test suite checks
+those guards, but the traps belong to the problem, not to this implementation,
+so they are worth knowing whichever code you use.
 
 ## Dropping the photon when you cut a network
 
@@ -16,9 +16,9 @@ it begins with $^{28}\mathrm{Si}(\gamma,\alpha)^{24}\mathrm{Mg}$.
 
 `limit_network` avoids this: only nuclides decide whether a reaction survives,
 so photons and leptons are kept automatically and listing `"gamma"` is
-harmless. Development versions of NucNetPy before the 1.0.0 release fell into
-the trap too, and with `include_linked=True` they also treated the photon as a
-link between otherwise unrelated reactions:
+harmless. With `include_linked=True`, which adds every nuclide that shares a
+reaction with the kept ones, the photon does not count as a link either;
+otherwise every photon reaction would join the network:
 
 ```python
 limit_network(net, select_species(net, zmax=20))   # keeps the photodisintegrations
@@ -36,11 +36,10 @@ reaction.
 Left out, that factor is not small. On the alpha chain at $T_9=5$ the reverse
 fits then differ from detailed balance by a median factor of 1.10 and up to 1.72
 (for $^{56}$Ni$(\gamma,\alpha)$), and the network relaxes to a composition a
-median 4.5 per cent and up to 48 per cent away from NSE. Versions of NucNetPy
-before the fix did exactly that; the comparison with `solve_nse` is what
-exposed it.
+median 4.5 per cent and up to 48 per cent away from NSE. No error message
+shows it; only the comparison with `solve_nse` does.
 
-The XML readers now recognise the derived reverse rates from their coefficients,
+The XML readers recognise the derived reverse rates from their coefficients,
 because libnucnet files do not usually carry ReacLib's `v` flag, and apply the
 ratio: the alpha chain then matches NSE to a median 0.34 per cent. For a
 network built in memory, call `apply_reverse_partition_functions(net)` yourself.
@@ -49,8 +48,8 @@ The coefficients show which two rates form a pair, but not which of the two was
 derived. The reader takes ReacLib's `v` flag from the fit labels when they carry
 it. Otherwise it takes the photodisintegration of a capture/photodisintegration
 pair, and the endothermic member of any other pair. Choosing the endothermic
-member everywhere, as NucNetPy 1.0.0 did, put the factor on the wrong rate in
-1,862 of the 32,676 pairs of the ReacLib snapshot of 29 March 2022. Those are
+member everywhere would put the factor on the wrong rate in 1,862 of the
+32,676 pairs of the ReacLib snapshot of 29 March 2022. Those are
 captures into nuclei beyond the drip lines, which are endothermic, yet ReacLib
 still fits the capture and derives the photodisintegration. Eighteen two-body
 pairs in that snapshot can be told apart only by the flag. Write the labels
@@ -72,7 +71,7 @@ main sequence, and by about 100 in the Sun. NucNetPy multiplies the ReacLib
 fits of a reaction by $\rho Y_e$ once for each electron among its reactants.
 `Reaction.rate` and `ReactionNetwork.rates` need `ye` for that. `Reaction.flux`,
 `ReactionNetwork.flows`, `ReactionNetwork.ydot` and the network's right-hand
-side work it out from the abundances. NucNetPy 1.0.0 left the factor out.
+side work it out from the abundances.
 
 ## Running out of fuel with BDF
 
@@ -100,8 +99,8 @@ evaluations, and far more when the conditions are explosive. A hydrogen-rich
 zone at $T_9=2$ and $\rho=10^{6}\,\mathrm{g\,cm^{-3}}$ is such a case: proton
 captures there take about $10^{-10}$ s, and on a 898-species network BDF had
 covered less than $10^{-10}$ s of the requested second after more than two
-minutes. The command now warns when a network has more than 400 species, and
-reports how far it has got every 30 s on standard error (`--progress`).
+minutes. The command therefore warns when a network has more than 400 species,
+and reports how far it has got every 30 s on standard error (`--progress`).
 
 Cut the network to the nuclides the problem needs with `--zmax` and `--amax`,
 which keep the reactions among the retained nuclides, the weak decays and
@@ -114,7 +113,7 @@ for every trace abundance to the relative tolerance. In Python, use
 ## Placeholder nuclear data in an equilibrium solve
 
 A production reaction file names nuclides that its nuclide file does not
-describe — 279 of them in the database used for the manuscript. NucNetPy
+describe — 279 of them in the JINA database behind the published results. NucNetPy
 synthesises placeholders so the reactions remain usable, with a mass excess of
 zero.
 
@@ -125,13 +124,12 @@ in `network.validate()["species_without_nuclear_data"]` and excluded from
 equilibrium solves by default. `nucnetpy validate` reports them in a single
 `no_nuclear_data` warning.
 
-The record has to survive a file. Before version 1.1.1, `nucnetpy jina-combine`
-and `write_xml` wrote each placeholder out as an ordinary nuclide record with a
-mass excess of zero, and reading the file back could no longer tell it from real
-data, so an equilibrium solve on the combined file included it again. They now
-leave placeholders out of the nuclide records, and both readers recreate and
-record them from the reactions that name them. Regenerate any combined file
-written by an earlier version.
+The record has to survive a file. Written out as an ordinary nuclide record
+with a mass excess of zero, a placeholder could not be told from real data when
+the file is read back, and an equilibrium solve on the combined file would
+include it again. `nucnetpy jina-combine` and `write_xml` therefore leave
+placeholders out of the nuclide records, and both readers recreate and record
+them from the reactions that name them.
 
 ## Trusting `success` without checking it
 

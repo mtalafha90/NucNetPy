@@ -13,7 +13,8 @@ cp docs/manual/_build/pdf/nucnetpy.pdf docs/manual/nucnetpy-manual.pdf
 ```
 
 Check that `version` in `pyproject.toml`, `CITATION.cff`, and the Zenodo record
-agree.
+agree. In `CHANGELOG.md`, give the entries under "Unreleased" a heading with
+the new version and the release date.
 
 ## 2. Build
 
@@ -52,7 +53,8 @@ cd /tmp/nucnetpy-<version> && /tmp/sdistcheck/bin/python -m pytest -q
 ```
 
 The sdist must carry the tests, `validation/`, `notebooks/`, `examples/`, the
-manual, `LICENSE` and `CITATION.cff`. `MANIFEST.in` controls this.
+manual, `LICENSE`, `CITATION.cff` and `CHANGELOG.md`. `MANIFEST.in` controls
+this.
 
 ## 4. Credentials
 

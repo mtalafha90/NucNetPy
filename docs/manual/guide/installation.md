@@ -14,7 +14,7 @@ python -m pip install -e .
 pytest -q
 ```
 
-The test suite runs in about a second and should report all tests passing
+The test suite takes under a minute and should report all tests passing
 before you rely on any result.
 
 ## Optional extras
@@ -25,7 +25,7 @@ before you rely on any result.
 | `hdf5` | `h5py` | HDF5 persistence |
 | `plot` | `matplotlib`, `networkx` | plotting and graph export |
 | `notebook` | `jupyter`, `pandas`, `matplotlib` | the tutorial notebooks |
-| `docs` | `sphinx`, `furo`, `myst-parser` | building this manual |
+| `docs` | `sphinx`, `furo`, `myst-parser`, `rinohtype`, `ziamath`, `cairosvg` | building this manual |
 
 ```bash
 python -m pip install -e ".[dev,hdf5,plot,notebook]"

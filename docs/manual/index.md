@@ -30,11 +30,10 @@ reference/cli
 
 ```{toctree}
 :maxdepth: 1
-:caption: Developer notes
+:caption: Notes
 
 notes/conversion
 notes/blog_coverage
-notes/port_status
 notes/numerical_identity
 notes/jina_workflow
 ```
@@ -50,8 +49,11 @@ maps the original concepts onto this API and {doc}`notes/blog_coverage` maps
 each blog workflow onto the feature that replaces it.
 
 If you are about to run a production calculation, read {doc}`guide/pitfalls`
-first. It describes two behaviours that produce plausible but wrong answers
-without raising an error.
+first. It describes the traps that produce plausible but wrong answers without
+raising an error.
+
+If you want to compare NucNetPy with a NucNet Tools build of your own,
+{doc}`notes/numerical_identity` explains how.
 
 ## Citing
 
