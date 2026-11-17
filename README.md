@@ -528,14 +528,15 @@ JINA reaction-rate database that provides the nuclear data.
 
 **DOI:** [10.5281/zenodo.20756797](https://doi.org/10.5281/zenodo.20756797)
 (all versions; it always resolves to the latest release). Each release also
-has its own DOI, listed on the Zenodo page; that of 1.0.0 is
-[10.5281/zenodo.20756798](https://doi.org/10.5281/zenodo.20756798).
+has its own DOI, listed on the Zenodo page: that of 1.1.0 is
+[10.5281/zenodo.24152490](https://doi.org/10.5281/zenodo.24152490), and that
+of 1.0.0 is [10.5281/zenodo.20756798](https://doi.org/10.5281/zenodo.20756798).
 
 ```bibtex
 @software{nucnetpy,
   author  = {Talafha, Mohammed H. and Ershaidat, Nidal M.},
   title   = {NucNetPy: a pure-Python nuclear reaction-network package},
-  version = {1.1.0},
+  version = {1.1.1},
   url     = {https://github.com/mtalafha90/NucNetPy},
   doi     = {10.5281/zenodo.20756797},
   year    = {2026}
