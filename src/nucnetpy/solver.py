@@ -7,7 +7,7 @@ projection, screening hooks, and weak-rate source terms.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 import numpy as np
 
 from .core import Network, Zone
@@ -88,7 +88,8 @@ def _ye_from_vec(species, yvec, species_map=None) -> float:
     for s, y in zip(species, yvec):
         try:
             sp = species_map.get(s) if species_map else Species.parse(s)
-            if sp is None: sp = Species.parse(s)
+            if sp is None:
+                sp = Species.parse(s)
             total += sp.z * max(float(y), 0.0)
         except Exception:
             continue
@@ -111,7 +112,8 @@ def rhs(network: Network, species: Sequence[str], thermo: ThermoFunction, screen
                 out[idx[name]] += val
         if weak_rates:
             for wr in weak_rates:
-                parent = getattr(wr, 'parent', None); daughter = getattr(wr, 'daughter', None)
+                parent = getattr(wr, 'parent', None)
+                daughter = getattr(wr, 'daughter', None)
                 if parent in idx and daughter in idx:
                     rate = wr.rate(t9, rho * max(ye, 1e-30))
                     flow = rate * abund.get(parent, 0.0)
@@ -132,7 +134,8 @@ def jacobian(network: Network, species: Sequence[str], thermo: ThermoFunction, s
         J = np.zeros((n, n), dtype=float)
         for k in range(n):
             h = eps * max(abs(y[k]), 1.0)
-            yp = y.copy(); yp[k] += h
+            yp = y.copy()
+            yp[k] += h
             J[:, k] = (f(t, yp) - base) / h
         if sparse:
             try:
@@ -542,7 +545,8 @@ def _implicit_euler_step(f, t, y, h, max_iter=12):
         eps = 1e-8
         base_f = f(t + h, yn)
         for k in range(n):
-            yp = yn.copy(); yp[k] += eps * max(abs(yn[k]), 1.0)
+            yp = yn.copy()
+            yp[k] += eps * max(abs(yn[k]), 1.0)
             J[:, k] -= h * (f(t + h, yp) - base_f) / (yp[k] - yn[k])
         try:
             step = np.linalg.solve(J, -g)

@@ -1,10 +1,9 @@
 """Nuclear decay helpers ported into Python."""
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Dict, Iterable, Mapping, Optional
+from typing import Iterable
 import math
-from .reactions import Reaction, ReactionNetwork, ReactionParticipant
-from .species import Species, normalize_species_name
+from .reactions import Reaction, ReactionParticipant
 
 LN2 = math.log(2.0)
 

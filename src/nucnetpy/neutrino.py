@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 import math
-import numpy as np
 from .mathutils import linear_interpolation
 
 @dataclass

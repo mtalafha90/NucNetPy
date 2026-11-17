@@ -130,9 +130,9 @@ def _is_library_reverse(candidate: Reaction, partner: Reaction,
        product is unbound;
     3. otherwise the endothermic member, the one with the lower a1.
 
-    The third rule alone used to decide; in the ReacLib snapshot of
-    29 March 2022 it picked the wrong member of 1,862 of 32,676 pairs, nearly
-    all captures into nuclei beyond the drip lines.
+    The third rule cannot stand alone: in the ReacLib snapshot of
+    29 March 2022 it would pick the wrong member of 1,862 of 32,676 pairs,
+    nearly all captures into nuclei beyond the drip lines.
     """
     if not candidate.rate_fits or not partner.rate_fits:
         return False

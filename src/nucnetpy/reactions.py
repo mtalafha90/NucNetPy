@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 import bisect
 import math
 from collections import Counter, defaultdict
-from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Any
+from typing import Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import numpy as np
 
 from .species import Species, is_massless, normalize_species_name
@@ -331,7 +331,8 @@ class ReactionNetwork:
         unique = []
         for r in self.reactions:
             if r.key not in seen:
-                unique.append(r); seen.add(r.key)
+                unique.append(r)
+                seen.add(r.key)
         self.reactions = unique
         return self
 
@@ -450,8 +451,10 @@ def read_reaclib_text(text: str) -> ReactionNetwork:
             rhs, coeff_text = (rest.split(';', 1) + [''])[:2] if ';' in rest else (rest, '')
             coeffs = []
             for tok in coeff_text.replace(',', ' ').split():
-                try: coeffs.append(float(tok))
-                except Exception: pass
+                try:
+                    coeffs.append(float(tok))
+                except Exception:
+                    pass
             fits = [RateFit(coeffs)] if len(coeffs) == 7 else []
             net.add(Reaction(_participants_from_names(lhs.replace('+',' ').split()), _participants_from_names(rhs.replace('+',' ').split()), rate_fits=fits))
             i += 1
@@ -461,8 +464,10 @@ def read_reaclib_text(text: str) -> ReactionNetwork:
         coeffs = []
         if i + 1 < len(lines):
             for tok in lines[i+1].replace(',', ' ').split():
-                try: coeffs.append(float(tok))
-                except Exception: pass
+                try:
+                    coeffs.append(float(tok))
+                except Exception:
+                    pass
         if len(coeffs) >= 7 and len(toks) >= 2:
             mid = max(1, len(toks)//2)
             net.add(Reaction(_participants_from_names(toks[:mid]), _participants_from_names(toks[mid:]), rate_fits=[RateFit(coeffs[:7])]))

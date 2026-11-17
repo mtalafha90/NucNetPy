@@ -7,12 +7,10 @@ for absent species, and against photons being reported as species.
 import copy
 import math
 
-import numpy as np
 import pytest
 
 from nucnetpy import Network, Species, Reaction, RateFit, Zone, constant_thermo, evolve_zone, time_grid
 from nucnetpy.analysis import entropy_generation_rate, integrated_currents, system_timescales
-from nucnetpy.detailed_balance import consistent_reverse_network
 from nucnetpy.nse import _log_prefactor
 
 

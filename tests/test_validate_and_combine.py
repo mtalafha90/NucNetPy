@@ -1,12 +1,12 @@
 """Photons, leptons and placeholder species through validation and file round trips.
 
-Two defects are pinned here.  ``nucnetpy validate`` reported every photon and
-lepton named by a reaction as a missing species, although they are reaction
-participants and not nuclides.  And a combined file written by
-``nucnetpy jina-combine`` lost the record of which species have no nuclear data:
-the placeholders were written out as nuclide records with a mass excess of
-zero, so that an equilibrium solve on the combined file let an unbound nuclide
-compete with real ones.
+Two behaviours are pinned here.  ``nucnetpy validate`` must not report the
+photons and leptons a reaction names as missing species: they are reaction
+participants, not nuclides.  And a combined file written by
+``nucnetpy jina-combine`` must keep the record of which species have no nuclear
+data.  Written out as nuclide records with a mass excess of zero, the
+placeholders would let an unbound nuclide compete with real ones in an
+equilibrium solve on the combined file.
 """
 import pytest
 

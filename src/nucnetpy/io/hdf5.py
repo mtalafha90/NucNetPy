@@ -1,5 +1,4 @@
 from __future__ import annotations
-from pathlib import Path
 import numpy as np
 from ..core import Network, Zone
 from ..species import Species, is_massless
@@ -28,16 +27,20 @@ def read_hdf5(path) -> Network:
             # them; they are not nuclides.
             if is_massless(n):
                 continue
-            try: net.add_species(Species.parse(n))
-            except Exception: pass
+            try:
+                net.add_species(Species.parse(n))
+            except Exception:
+                pass
         if 'abundances' in h:
             arr = h['abundances'][()]
             labels = [x.decode() if isinstance(x, bytes) else str(x) for x in h.get('zone_labels', [])]
             for i, row in enumerate(arr):
                 label = tuple((labels[i].split('|') if i < len(labels) else [str(i),'0','0'])[:3])
-                while len(label) < 3: label = label + ('0',)
+                while len(label) < 3:
+                    label = label + ('0',)
                 z = Zone(label=label)
                 for n, y in zip(names, row):
-                    if y != 0: z.set_abundance(n, float(y))
+                    if y != 0:
+                        z.set_abundance(n, float(y))
                 net.add_zone(z)
     return net

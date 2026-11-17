@@ -1,6 +1,5 @@
 from __future__ import annotations
-from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import List
 from ..core import Zone
 from ..reactions import Reaction, RateFit
 
@@ -10,7 +9,8 @@ def read_abundance_text(path) -> Zone:
     with open(path) as f:
         for line in f:
             line = line.strip()
-            if not line or line.startswith('#'): continue
+            if not line or line.startswith('#'):
+                continue
             parts = line.split()
             if len(parts) >= 2:
                 z.set_abundance(parts[0], float(parts[1]))
@@ -22,7 +22,8 @@ def read_simple_reactions(path) -> List[Reaction]:
     with open(path) as f:
         for line in f:
             line = line.strip()
-            if not line or line.startswith('#'): continue
+            if not line or line.startswith('#'):
+                continue
             if ';' in line:
                 spec, coeff = line.split(';', 1)
             else:

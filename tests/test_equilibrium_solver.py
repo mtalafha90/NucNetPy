@@ -1,11 +1,10 @@
 """Properties of the shared NSE/QSE solver that must not depend on SciPy's version.
 
-Each test guards a defect that once made results differ between machines:
-non-unique chemical potentials reported as if they were unique, a success flag
-looser than the requested tolerance, and trace abundances left undetermined by
-a charge residual below floating-point resolution.
+Each test guards against a way in which results could differ between
+machines: non-unique chemical potentials reported as if they were unique, a
+success flag looser than the requested tolerance, and trace abundances left
+undetermined by a charge residual below floating-point resolution.
 """
-import math
 
 import pytest
 
@@ -54,7 +53,7 @@ def test_trace_nucleons_balance_charge_at_ye_one_half(t9, rho):
 
 def test_success_means_the_requested_tolerance():
     # A constraint set to the unconstrained NSE value must give lambda = 0 to
-    # far better than the old 1e-6 acceptance threshold.
+    # the requested tolerance, far better than 1e-6.
     net = network(NUCLEONS + [("he4", 2.4249), ("si28", -21.4928),
                               ("fe56", -60.6054), ("ni56", -53.9042)])
     nse = solve_nse(net, t9=5.0, rho=1e8, ye=0.5)

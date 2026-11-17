@@ -1,6 +1,5 @@
 """Graph export helpers replacing the Graphviz-oriented examples."""
 from __future__ import annotations
-from typing import Mapping, Optional
 from .core import Network
 
 

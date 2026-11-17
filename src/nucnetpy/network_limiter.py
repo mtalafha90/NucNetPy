@@ -18,11 +18,16 @@ def select_species(network, zmin: Optional[int] = None, zmax: Optional[int] = No
     wanted = {e.lower() for e in elements} if elements else None
     out = []
     for name, sp in network.species.items():
-        if zmin is not None and sp.z < zmin: continue
-        if zmax is not None and sp.z > zmax: continue
-        if amin is not None and sp.a < amin: continue
-        if amax is not None and sp.a > amax: continue
-        if wanted is not None and sp.element not in wanted: continue
+        if zmin is not None and sp.z < zmin:
+            continue
+        if zmax is not None and sp.z > zmax:
+            continue
+        if amin is not None and sp.a < amin:
+            continue
+        if amax is not None and sp.a > amax:
+            continue
+        if wanted is not None and sp.element not in wanted:
+            continue
         out.append(name)
     return sorted(out, key=lambda n: (network.species[n].z, network.species[n].a))
 
@@ -51,7 +56,8 @@ def limit_network(network, species: Iterable[str], include_linked: bool = False)
             for r in network.reactions.reactions:
                 names = nuclides(r)
                 if names & keep and not names <= keep:
-                    keep |= names; changed = True
+                    keep |= names
+                    changed = True
     network.species = {k: v for k, v in network.species.items() if k in keep or is_massless(k)}
     network.reactions.reactions = [r for r in network.reactions.reactions if nuclides(r) <= keep]
     for z in network.zones:

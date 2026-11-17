@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Optional
 
 from ..core import Network
-from ..reactions import ReactionNetwork
 from .xml import (_parse_species, _parse_reactions, _parse_zones,
                   _record_species_without_nuclear_data, write_xml)
 

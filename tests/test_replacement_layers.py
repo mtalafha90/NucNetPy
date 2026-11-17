@@ -1,5 +1,4 @@
-import numpy as np
-from nucnetpy import Network, Species, Zone, Reaction, ReactionNetwork, RateFit, time_grid, evolve_zone
+from nucnetpy import Network, Species, Zone, Reaction, ReactionNetwork, time_grid, evolve_zone
 from nucnetpy import read_xml_string, solve_nse, weak_screening_factor, WeakRateTable, validate_network
 from nucnetpy.solver import jacobian_sparsity
 

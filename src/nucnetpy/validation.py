@@ -2,12 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence
-import math
-import numpy as np
+from typing import Dict, List, Mapping, Optional
 
 from .core import Network, Zone
-from .species import Species, normalize_species_name
+from .species import normalize_species_name
 
 @dataclass
 class ValidationIssue:
@@ -73,7 +71,8 @@ def compare_abundances(a: Mapping[str, float], b: Mapping[str, float], rtol: flo
     names = sorted(set(map(normalize_species_name, a)) | set(map(normalize_species_name, b)))
     out = {}
     for n in names:
-        av = float(a.get(n, 0.0)); bv = float(b.get(n, 0.0))
+        av = float(a.get(n, 0.0))
+        bv = float(b.get(n, 0.0))
         out[n] = abs(av - bv) / max(abs(bv), atol) if abs(av - bv) > atol else 0.0
     return out
 

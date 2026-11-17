@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Tuple
 import numpy as np
 
 from .core import Network, Zone
@@ -61,7 +61,8 @@ def energy_generation_rate(network: Network, zone_index: int = 0, t9: Optional[f
     # MeV per nucleon-ish proxy: sum Q * reaction flux. Users should calibrate
     # to their original libnucnet build for publication-grade energetics.
     z = network.zone(zone_index)
-    t9 = t9 or z.temperature9(); rho = rho or z.density()
+    t9 = t9 or z.temperature9()
+    rho = rho or z.density()
     total = 0.0
     for r in network.reactions.reactions:
         total += r.q_value * r.flux(z.abundances, t9=t9, rho=rho)
@@ -109,7 +110,8 @@ def charge_changing_flows(network: Network, zone_index: int = 0, t9: Optional[fl
     conserve Z and contribute nothing.  ``sum(result.values())`` is dYe/dt.
     """
     z = network.zone(zone_index)
-    t9 = t9 or z.temperature9(); rho = rho or z.density()
+    t9 = t9 or z.temperature9()
+    rho = rho or z.density()
     out: Dict[str, float] = {}
     for r in network.reactions.reactions:
         dz = 0
@@ -134,7 +136,8 @@ def system_timescales(network: Network, zone_index: int = 0, t9: Optional[float]
     the stiffest components of the system (blog: "Computing system timescales").
     """
     z = network.zone(zone_index)
-    t9 = t9 or z.temperature9(); rho = rho or z.density()
+    t9 = t9 or z.temperature9()
+    rho = rho or z.density()
     dy = network.reactions.ydot(z.abundances, t9=t9, rho=rho)
     out: Dict[str, float] = {}
     for name in set(z.abundances) | set(dy):
@@ -300,7 +303,8 @@ def entropy_generation_rate(network: Network, zone_index: int = 0, t9: Optional[
     rates instead.
     """
     z = network.zone(zone_index)
-    t9 = t9 or z.temperature9(); rho = rho or z.density()
+    t9 = t9 or z.temperature9()
+    rho = rho or z.density()
     abundances = z.abundances
     ds = reaction_entropy_changes(network, abundances, t9, rho)
     reactions = [r for r in network.reactions.reactions if _all_present(r, abundances)]

@@ -1,12 +1,11 @@
 """Tests for features ported from the NucNet Tools C++ source (r647).
 
-Covers the previously "not ported" items from docs/BLOG_COVERAGE.md, implemented
-from user/nse_corr.cpp, user/flow_utilities.cpp, and the libnuceq cluster
-workflow of examples/analysis/compare_equil.cpp.
+Covers the items of docs/BLOG_COVERAGE.md ported from user/nse_corr.cpp,
+user/flow_utilities.cpp, and the libnuceq cluster workflow of
+examples/analysis/compare_equil.cpp.
 """
 import math
 
-import numpy as np
 import pytest
 
 from nucnetpy import (
@@ -15,7 +14,7 @@ from nucnetpy import (
     coulomb_nse_correction, gamma_e,
     species_coulomb_chemical_potential, species_coulomb_energy, species_coulomb_entropy,
     entropy_generation_rate, integrated_currents,
-    evolve_zone, time_grid, constant_thermo, heavy_nuclei_abundance,
+    evolve_zone, time_grid, constant_thermo,
 )
 
 

@@ -362,7 +362,8 @@ def _parse_reactions(root, net: Network):
                     rv = toks[1]
                 ft, fr = _float_or_none(t9v), _float_or_none(rv)
                 if ft is not None and fr is not None:
-                    xs.append(ft); ys.append(fr)
+                    xs.append(ft)
+                    ys.append(fr)
             if xs and ys:
                 tabular = TabularRate(xs, ys)
 
@@ -499,7 +500,8 @@ def write_xml(network: Network, path: str | Path) -> None:
         if zone.properties or zone.optional_properties:
             props = ET.SubElement(ze, 'optional_properties')
             for k, v in {**zone.properties, **zone.optional_properties}.items():
-                pe = ET.SubElement(props, 'property', name=str(k)); pe.text = str(v)
+                pe = ET.SubElement(props, 'property', name=str(k))
+                pe.text = str(v)
         abs_el = ET.SubElement(ze, 'abundances')
         for name, y in sorted(zone.abundances.items()):
             ET.SubElement(abs_el, 'abundance', name=name, y=f'{y:.17g}')

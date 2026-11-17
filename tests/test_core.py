@@ -23,6 +23,9 @@ def test_evolve_zone():
     for n in ['h1','he2']:
         net.add_species(Species.parse(n))
     net.reactions.add(Reaction.from_names(['h1','h1'], ['he2'], rate_fits=[RateFit([0,0,0,0,0,0,0])]))
-    z = Zone(); z.set_abundance('h1', 1.0); z.set_abundance('he2', 0.0); net.add_zone(z)
+    z = Zone()
+    z.set_abundance('h1', 1.0)
+    z.set_abundance('he2', 0.0)
+    net.add_zone(z)
     res = evolve_zone(net, z, time_grid(0, 1e-4, 5), constant_thermo(1,1), method='rk4')
     assert res.final_abundances['h1'] < 1.0
