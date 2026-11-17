@@ -90,6 +90,27 @@ and sizes each step so that no abundance changes by more than `max_change`
 (0.5 per cent by default). It is first-order accurate: halving `max_change`
 halves the error. Use it when a large network runs a fuel down.
 
+## Integrating a whole database
+
+`nucnetpy evolve-zone` integrates every species in the file it is given. For a
+complete JINA database that is 8131 species and 81758 reactions, and one
+evaluation of the right-hand side takes most of a second, because it is a
+Python loop over the reactions. A stiff integration needs thousands of
+evaluations, and far more when the conditions are explosive. A hydrogen-rich
+zone at $T_9=2$ and $\rho=10^{6}\,\mathrm{g\,cm^{-3}}$ is such a case: proton
+captures there take about $10^{-10}$ s, and on a 898-species network BDF had
+covered less than $10^{-10}$ s of the requested second after more than two
+minutes. The command now warns when a network has more than 400 species, and
+reports how far it has got every 30 s on standard error (`--progress`).
+
+Cut the network to the nuclides the problem needs with `--zmax` and `--amax`,
+which keep the reactions among the retained nuclides, the weak decays and
+photodisintegrations included. Do not cut below the nuclides the burning
+reaches, or the material piles up at the edge of the network. `--atol 1e-12`
+is often enough, and much faster than the default of $10^{-30}$, which asks
+for every trace abundance to the relative tolerance. In Python, use
+`limit_network` and the `atol` argument of `evolve_zone`.
+
 ## Placeholder nuclear data in an equilibrium solve
 
 A production reaction file names nuclides that its nuclide file does not
@@ -101,7 +122,16 @@ A mass excess of zero is not a neutral default: it makes an unbound nuclide look
 as tightly bound as the most stable one. Left in an NSE solve, $^{5}$Li reached
 a mass fraction of 0.28 and displaced the iron peak. They are therefore recorded
 in `network.validate()["species_without_nuclear_data"]` and excluded from
-equilibrium solves by default.
+equilibrium solves by default. `nucnetpy validate` reports them in a single
+`no_nuclear_data` warning.
+
+The record has to survive a file. Before version 1.1.1, `nucnetpy jina-combine`
+and `write_xml` wrote each placeholder out as an ordinary nuclide record with a
+mass excess of zero, and reading the file back could no longer tell it from real
+data, so an equilibrium solve on the combined file included it again. They now
+leave placeholders out of the nuclide records, and both readers recreate and
+record them from the reactions that name them. Regenerate any combined file
+written by an earlier version.
 
 ## Trusting `success` without checking it
 

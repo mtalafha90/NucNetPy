@@ -13,7 +13,8 @@ from typing import Optional
 
 from ..core import Network
 from ..reactions import ReactionNetwork
-from .xml import _parse_species, _parse_reactions, _parse_zones, write_xml
+from .xml import (_parse_species, _parse_reactions, _parse_zones,
+                  _record_species_without_nuclear_data, write_xml)
 
 
 def read_jina_xml(
@@ -56,35 +57,21 @@ def read_jina_xml(
     nuc_root = ET.parse(nuclides_xml).getroot()
     reac_root = ET.parse(reactions_xml).getroot()
 
-    _parse_species(nuc_root, net)
+    described = _parse_species(nuc_root, net)
     _parse_reactions(reac_root, net)
+    if zones_xml is not None:
+        zone_root = ET.parse(zones_xml).getroot()
+        _parse_zones(zone_root, net)
 
-    # Ensure every species referenced by reactions has a nuclide entry.  A
-    # placeholder keeps the reaction usable for structural work, but it carries
-    # a mass excess of zero, which is not a physical value: in an equilibrium
-    # calculation a zero mass excess makes an unbound nuclide look as tightly
-    # bound as the most stable one.  Record the synthesised names so that
-    # validation can report them and the equilibrium solvers can leave them out.
-    from ..species import is_massless
-    synthesised = []
-    for name in net.reactions.species_names():
-        if name in net.species or is_massless(name):
-            continue
-        try:
-            net.ensure_species(name)
-            synthesised.append(name)
-        except Exception:
-            pass
-    if synthesised:
-        net.metadata["species_without_nuclear_data"] = ",".join(sorted(synthesised))
+    # Give every species that a reaction or the zone names, but the nuclide file
+    # leaves out, a placeholder entry, and record it as having no nuclear data
+    # (see _record_species_without_nuclear_data).  The same function runs in
+    # read_xml, so a combined file written by write_xml keeps the record.
+    _record_species_without_nuclear_data(net, described)
 
     if reverse_partition_functions:
         from ..detailed_balance import apply_reverse_partition_functions
         apply_reverse_partition_functions(net)
-
-    if zones_xml is not None:
-        zone_root = ET.parse(zones_xml).getroot()
-        _parse_zones(zone_root, net)
 
     return net
 

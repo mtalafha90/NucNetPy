@@ -244,8 +244,13 @@ def jacobian_sparsity(network: Network, species: Sequence[str]):
         return mat
 
 
-def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Optional[ThermoFunction] = None, method: str = "bdf", species: Optional[Sequence[str]] = None, screening: Optional[ScreeningFunction] = None, weak_rates: Optional[Sequence[object]] = None, rtol: float = 1e-6, atol: float = 1e-30, use_jacobian: bool = True, project_positive: bool = True, jac_mode: str = "analytic", max_change: float = 0.005, min_mass_fraction: float = 1e-15) -> EvolutionResult:
+def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Optional[ThermoFunction] = None, method: str = "bdf", species: Optional[Sequence[str]] = None, screening: Optional[ScreeningFunction] = None, weak_rates: Optional[Sequence[object]] = None, rtol: float = 1e-6, atol: float = 1e-30, use_jacobian: bool = True, project_positive: bool = True, jac_mode: str = "analytic", max_change: float = 0.005, min_mass_fraction: float = 1e-15, progress: Optional[Callable[[float], None]] = None) -> EvolutionResult:
     """Evolve one zone over ``times``.
+
+    ``progress``, if given, is called with the time the integrator has reached:
+    on every right-hand-side evaluation for the SciPy methods, and after every
+    accepted step for ``adaptive_implicit_euler``.  It lets a caller report on
+    a long integration; it must not change anything.
 
     ``method="adaptive_implicit_euler"`` takes implicit (backward) Euler steps
     solved by Newton-Raphson iterations, the scheme NucNet Tools uses, and
@@ -291,8 +296,15 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
     thermo = thermo or zone_thermo(zone)
     if method_l in _ADAPTIVE_METHODS:
         return _adaptive_implicit_euler(network, species, y0, ts, thermo, screening,
-                                        weak_rates, max_change, min_mass_fraction)
+                                        weak_rates, max_change, min_mass_fraction,
+                                        progress=progress)
     f = rhs(network, species, thermo, screening=screening, weak_rates=weak_rates)
+    if progress is not None:
+        _rhs = f
+
+        def f(t, y):
+            progress(t)
+            return _rhs(t, y)
     if method_l in _SCIPY_METHODS:
         try:
             from scipy.integrate import solve_ivp
@@ -344,7 +356,8 @@ def _adaptive_implicit_euler(network: Network, species: Sequence[str], y0: np.nd
                              weak_rates, max_change: float, min_mass_fraction: float,
                              newton_tol: float = 1e-7, max_newton: int = 12,
                              jac_every: int = 4, max_growth: float = 1.5,
-                             max_rejections: int = 200) -> EvolutionResult:
+                             max_rejections: int = 200,
+                             progress: Optional[Callable[[float], None]] = None) -> EvolutionResult:
     """Implicit Euler steps with Newton-Raphson iterations and step control.
 
     Each step solves ``y - y_old - h f(t + h, y) = 0`` by Newton iterations
@@ -430,6 +443,8 @@ def _adaptive_implicit_euler(network: Network, species: Sequence[str], y0: np.nd
                 t = target if last else t + h
                 y = ynew
                 steps += 1
+                if progress is not None:
+                    progress(t)
                 jm_age += 1
                 in_a_row = 0
                 grow = max_growth if change == 0.0 else min(max_growth,
