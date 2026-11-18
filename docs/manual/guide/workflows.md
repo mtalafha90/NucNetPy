@@ -80,14 +80,20 @@ result = nn.evolve_zone(net, zone, times, thermo=thermo,
 print(result.steps, result.rejected_steps)
 ```
 
+In explosive burning, `max_change=0.05` with `min_mass_fraction=1e-10` is
+usually accurate to a fraction of a per cent and many times faster than the
+defaults; check it by repeating the run with a smaller `max_change` (see
+{doc}`pitfalls`).
+
 ### Choosing the Jacobian
 
 The flows are monomials in the abundances, so the Jacobian is available in
-closed form and costs one sweep over the reaction list, against `N+1`
-right-hand-side evaluations for finite differences.
+closed form. Built for all the reactions at once, like the right-hand side, it
+costs about as much as a few right-hand-side evaluations, against `N+1` for
+finite differences.
 
 ```python
-nn.evolve_zone(..., jac_mode="analytic")   # default; >100x faster at 100 species
+nn.evolve_zone(..., jac_mode="analytic")   # default; ~18x faster at 100 species, ~160x at 900
 nn.evolve_zone(..., jac_mode="numerical")  # finite differences
 nn.evolve_zone(..., jac_mode="sparsity")   # SciPy estimates it from the pattern
 ```

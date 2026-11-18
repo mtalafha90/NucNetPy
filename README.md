@@ -36,12 +36,12 @@ which routines were written by working from named C++ source files.
   checks.
 - **Evolution** — one-zone and multi-zone integration with SciPy BDF/Radau/LSODA,
   NucNet Tools' adaptive implicit Euler scheme (`method="adaptive_implicit_euler"`,
-  robust where a fuel runs out in a large network), fixed-step RK4 / implicit
-  Euler fallbacks, an **analytic Jacobian** of
-  the reaction flows (one sweep over the reaction list instead of `N+1`
-  right-hand-side evaluations — over 100x faster at 100 species), positivity
-  projection, and screening / weak-rate hooks. Choose the Jacobian with
-  `evolve_zone(..., jac_mode="analytic"|"numerical"|"sparsity")`.
+  robust where a fuel runs out or burning is explosive in a large network),
+  fixed-step RK4 / implicit Euler fallbacks, positivity projection, and
+  screening / weak-rate hooks. The right-hand side and an **analytic Jacobian**
+  evaluate every reaction at once, with NumPy arrays and a sparse stoichiometric
+  matrix: about 0.4 ms for a network of 900 species and 10,800 reactions. Choose
+  the Jacobian with `evolve_zone(..., jac_mode="analytic"|"numerical"|"sparsity")`.
 - **NSE & QSE** — statistical weights use `(2J+1)·G(T)`, matching the libnucnet
   convention in which the tabulated partition function is normalised to one at
   low temperature; species lacking nuclear data are excluded from equilibrium
@@ -286,12 +286,18 @@ both, as `Zone.temperature9()` and `Zone.density()` do, or read
 
 ---
 
-## Performance: the Jacobian
+## Performance
+
+The right-hand side evaluates every reaction at once: the rates as arrays, the
+flows as products of abundances, and `dY/dt` as one product with the sparse
+stoichiometric matrix. The parts of each rate that depend on the temperature
+alone are computed once per temperature. On a network of 900 species and
+10,800 reactions one evaluation takes about 0.4 ms.
 
 The reaction flows are monomials in the abundances, so the Jacobian is available
-in closed form and costs one sweep over the reaction list, against `N+1`
-right-hand-side evaluations for finite differences — over 100 times faster at
-one hundred species, and agreeing to the truncation error of the difference
+in closed form and costs about as much as a few right-hand sides, against `N+1`
+for finite differences: about 18 times faster at one hundred species and 160
+times at nine hundred, and agreeing to the truncation error of the difference
 quotient.
 
 ```python
@@ -302,6 +308,26 @@ evolve_zone(net, zone, times, thermo=..., jac_mode="sparsity")   # SciPy estimat
 
 SciPy applies a sparsity pattern only when no Jacobian callable is supplied, so
 the pattern and an explicit Jacobian are alternatives, not complements.
+
+### Large networks and explosive burning
+
+Explosive burning makes a large network extremely stiff. In a hydrogen-rich
+zone at `T9 = 2` and `rho = 1e6 g/cm^3`, proton captures take about 1e-10 s
+and light nuclei are destroyed faster still. BDF with the default absolute
+tolerance of 1e-30 then has to follow every trace nuclide closely, and its
+steps stay near 1e-12 s. The adaptive implicit Euler integrator with looser
+step control gets through:
+
+```bash
+nucnetpy evolve-zone combined_network.xml --t9 2 --rho 1e6 --t1 1 \
+    --method adaptive_implicit_euler --max-change 0.05 --min-mass-fraction 1e-10
+```
+
+On a 900-species network from hydrogen to nickel this integrates the full
+second in under a minute and passes the conservation check. Halving
+`--max-change` changes the hydrogen and helium abundances by less than 0.2 per
+cent, which is the check to make on your own case. `evolve-zone` suggests these
+settings itself when an integration advances too slowly to finish.
 
 ---
 
@@ -544,7 +570,7 @@ that of 1.1.1 is
 @software{nucnetpy,
   author  = {Talafha, Mohammed H. and Ershaidat, Nidal M.},
   title   = {NucNetPy: a pure-Python nuclear reaction-network package},
-  version = {1.1.1},
+  version = {1.2.0},
   url     = {https://github.com/mtalafha90/NucNetPy},
   doi     = {10.5281/zenodo.20756797},
   year    = {2026}

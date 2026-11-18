@@ -89,26 +89,45 @@ and sizes each step so that no abundance changes by more than `max_change`
 (0.5 per cent by default). It is first-order accurate: halving `max_change`
 halves the error. Use it when a large network runs a fuel down.
 
-## Integrating a whole database
+## Explosive burning in a large network
 
 `nucnetpy evolve-zone` integrates every species in the file it is given. For a
-complete JINA database that is 8131 species and 81758 reactions, and one
-evaluation of the right-hand side takes most of a second, because it is a
-Python loop over the reactions. A stiff integration needs thousands of
-evaluations, and far more when the conditions are explosive. A hydrogen-rich
-zone at $T_9=2$ and $\rho=10^{6}\,\mathrm{g\,cm^{-3}}$ is such a case: proton
-captures there take about $10^{-10}$ s, and on a 898-species network BDF had
-covered less than $10^{-10}$ s of the requested second after more than two
-minutes. The command therefore warns when a network has more than 400 species,
-and reports how far it has got every 30 s on standard error (`--progress`).
+complete JINA database that is 8131 species and 81758 reactions. Each
+evaluation of the right-hand side is cheap, because every reaction is evaluated
+at once, but explosive burning makes such a network extremely stiff. A
+hydrogen-rich zone at $T_9=2$ and $\rho=10^{6}\,\mathrm{g\,cm^{-3}}$ is such a
+case: proton captures there take about $10^{-10}$ s, and lithium, beryllium and
+boron are destroyed faster still. BDF with the default absolute tolerance of
+$10^{-30}$ has to follow every trace nuclide to six digits; on the
+891-nuclide network from hydrogen to nickel of the previous section its steps
+stayed near $10^{-12}$ s, and the requested second was out of reach.
 
-Cut the network to the nuclides the problem needs with `--zmax` and `--amax`,
-which keep the reactions among the retained nuclides, the weak decays and
-photodisintegrations included. Do not cut below the nuclides the burning
-reaches, or the material piles up at the edge of the network. `--atol 1e-12`
-is often enough, and much faster than the default of $10^{-30}$, which asks
-for every trace abundance to the relative tolerance. In Python, use
-`limit_network` and the `atol` argument of `evolve_zone`.
+The adaptive implicit Euler integrator with looser step control gets through:
+
+```bash
+nucnetpy evolve-zone combined_network.xml --t9 2 --rho 1e6 --t1 1 \
+    --method adaptive_implicit_euler --max-change 0.05 --min-mass-fraction 1e-10
+```
+
+On that network this integrates the full second in under a minute
+and passes the conservation check. With `--max-change` 0.02 and 0.01 the
+hydrogen and helium abundances change by less than 0.2 per cent, so 0.05 is
+accurate enough there; make the same check on your own case. BDF with
+`--atol 1e-12` also reached the end, but positivity projection had created
+$10^{-3}$ of the initial baryon number, so NucNetPy rejected the run. In
+Python, pass `method`, `max_change` and `min_mass_fraction` to `evolve_zone`.
+
+Above 1000 species, the command says up front how long one evaluation of the
+right-hand side takes. It reports how far it has got every 30 s on standard
+error (`--progress`), and at its first report it suggests these settings if
+the integration has covered almost none of the requested time.
+
+Cutting the network with `--zmax` and `--amax` also helps; it keeps the
+reactions among the retained nuclides, the weak decays and photodisintegrations
+included. Do not cut below the nuclides the burning reaches, or the material
+piles up at the edge of the network. For BDF, `--atol 1e-12` is often enough,
+and much faster than the default of $10^{-30}$, which asks for every trace
+abundance to the relative tolerance.
 
 ## Placeholder nuclear data in an equilibrium solve
 
