@@ -1,8 +1,8 @@
-"""evolve-zone on networks too large to integrate quickly.
+"""evolve-zone on large networks and in explosive burning.
 
-Given a complete JINA database, ``nucnetpy evolve-zone`` used to work for hours
-without a word: it integrated every species in the file, offered no way to cut
-the network or to set the tolerances, and printed nothing until it finished.
+Given a complete JINA database, ``nucnetpy evolve-zone`` must let the user cut
+the network and set the tolerances and the step control, report how far a long
+integration has got, and say what to try when it advances too slowly to finish.
 """
 from pathlib import Path
 
@@ -52,12 +52,13 @@ def test_a_large_network_is_announced(monkeypatch, capsys):
     monkeypatch.setattr(cli, "LARGE_NETWORK", 3)
     main(SHORT + ["--progress", "0"])
     err = capsys.readouterr().err
-    assert "warning: the network has" in err and "--zmax" in err
+    assert "note: the network has" in err
+    assert cli.EXPLOSIVE_STEP_CONTROL in err and "--zmax" in err
 
 
 def test_a_small_network_is_not_announced(capsys):
     main(SHORT + ["--progress", "0"])
-    assert "warning" not in capsys.readouterr().err
+    assert "note" not in capsys.readouterr().err
 
 
 def test_tolerances_reach_the_integrator(monkeypatch):
@@ -71,3 +72,43 @@ def test_tolerances_reach_the_integrator(monkeypatch):
     monkeypatch.setattr(cli, "evolve_zone", spy)
     main(SHORT + ["--rtol", "1e-8", "--atol", "1e-12", "--progress", "0"])
     assert seen["rtol"] == 1e-8 and seen["atol"] == 1e-12
+
+
+def test_step_control_reaches_the_integrator(monkeypatch):
+    seen = {}
+    real = cli.evolve_zone
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(cli, "evolve_zone", spy)
+    assert main(SHORT + ["--method", "adaptive_implicit_euler", "--max-change", "0.05",
+                         "--min-mass-fraction", "1e-10", "--progress", "0"]) == 0
+    assert seen["max_change"] == 0.05 and seen["min_mass_fraction"] == 1e-10
+
+
+def test_step_control_defaults_are_those_of_evolve_zone():
+    import inspect
+    defaults = inspect.signature(evolve_zone).parameters
+    args = cli.build_parser().parse_args(SHORT)
+    assert args.max_change == defaults["max_change"].default
+    assert args.min_mass_fraction == defaults["min_mass_fraction"].default
+
+
+@pytest.mark.parametrize("method, advice", [("bdf", cli.EXPLOSIVE_STEP_CONTROL),
+                                            ("adaptive_implicit_euler", "--max-change")])
+def test_an_integration_that_will_not_finish_gets_advice(capsys, method, advice):
+    args = cli.build_parser().parse_args(SHORT + ["--method", method])
+    progress = cli._Progress(time_grid(0.0, 1.0, 5), 0.0, args)
+    progress(1e-12)
+    progress(2e-12)
+    err = capsys.readouterr().err
+    assert err.count("hint:") == 1 and advice in err
+
+
+def test_an_integration_that_advances_gets_no_advice(capsys):
+    args = cli.build_parser().parse_args(SHORT)
+    progress = cli._Progress(time_grid(0.0, 1.0, 5), 0.0, args)
+    progress(0.3)
+    assert "hint" not in capsys.readouterr().err

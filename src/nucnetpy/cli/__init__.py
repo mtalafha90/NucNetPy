@@ -188,11 +188,19 @@ def cmd_species_history(args):
         print(i, '|'.join(label), f"{y:.12e}")
 
 
-#: Above this many species ``evolve-zone`` warns that the integration may be
-#: slow.  It is the evolve limit of ``validation/benchmark_performance.py``:
-#: NucNetPy evaluates its right-hand side in a Python loop over the reactions,
-#: which suits networks of up to a few hundred species.
-LARGE_NETWORK = 400
+#: Above this many species ``evolve-zone`` says up front how long one
+#: evaluation of the right-hand side takes, and what to do if the integration
+#: advances slowly.
+LARGE_NETWORK = 1000
+
+#: Settings of ``adaptive_implicit_euler`` that get through explosive burning
+#: in a large network; ``evolve-zone`` suggests them when an integration
+#: advances slowly.
+EXPLOSIVE_STEP_CONTROL = "--method adaptive_implicit_euler --max-change 0.05 --min-mass-fraction 1e-10"
+
+#: ``evolve-zone`` gives its advice when, at its first progress report, the
+#: integration has covered less than this fraction of the requested time.
+SLOW_FRACTION = 1.0e-6
 
 
 def _duration(seconds: float) -> str:
@@ -211,14 +219,18 @@ class _Progress:
 
     Called with the time the integrator has reached; prints at most once per
     ``interval`` seconds of computing time, so a short run prints nothing.
+    If the first report finds that the integration has covered almost none
+    of the requested time, it also says what to try instead.
     """
 
-    def __init__(self, times, interval: float):
+    def __init__(self, times, interval: float, args=None):
         import time
         self.times = times
         self.interval = interval
+        self.args = args
         self.start = self.last = time.perf_counter()
         self.reached = float(times[0])
+        self.advised = False
 
     def __call__(self, t: float) -> None:
         import time
@@ -232,10 +244,27 @@ class _Progress:
         print(f"evolve-zone: reached t = {self.reached:.4g} s of {self.times[-1]:.4g} s "
               f"({done} of {len(self.times) - 1} output times) after "
               f"{_duration(now - self.start)}", file=sys.stderr, flush=True)
+        if not self.advised:
+            self.advised = True
+            span = float(self.times[-1]) - float(self.times[0])
+            if span > 0 and (self.reached - float(self.times[0])) < SLOW_FRACTION * span:
+                print(f"evolve-zone: hint: {_advice(self.args)}", file=sys.stderr, flush=True)
+
+
+def _advice(args) -> str:
+    """What to try when an integration advances too slowly to finish."""
+    method = getattr(args, "method", "bdf")
+    if method == "adaptive_implicit_euler":
+        return ("at this rate the integration will not finish. Larger steps need a "
+                "larger --max-change (0.05 is usually accurate enough) and a larger "
+                "--min-mass-fraction (1e-10), or cut the network with --zmax and --amax.")
+    return ("at this rate the integration will not finish. Explosive burning makes "
+            f"the network very stiff; try {EXPLOSIVE_STEP_CONTROL}, or cut the "
+            "network with --zmax and --amax.")
 
 
 def _warn_if_large(n, z, thermo) -> None:
-    """Say up front when a network is too large to integrate quickly."""
+    """Say up front how costly a large network is, and what to do if it is slow."""
     import time
     import numpy as np
     from ..solver import rhs
@@ -248,11 +277,12 @@ def _warn_if_large(n, z, thermo) -> None:
     t0 = time.perf_counter()
     f(0.0, y0)
     one = time.perf_counter() - t0
-    print(f"evolve-zone: warning: the network has {len(species)} species and "
-          f"{len(n.reactions.reactions)} reactions. One evaluation of the "
-          f"right-hand side takes {one:.2g} s here, and a stiff integration "
-          f"needs thousands, so this can run for hours. NucNetPy suits networks "
-          f"of up to a few hundred species: cut this one with --zmax and --amax.",
+    print(f"evolve-zone: note: the network has {len(species)} species and "
+          f"{len(n.reactions.reactions)} reactions; one evaluation of the "
+          f"right-hand side takes {one:.2g} s here. A stiff integration needs "
+          f"thousands of evaluations, and explosive burning far more. If the "
+          f"integration advances slowly, use {EXPLOSIVE_STEP_CONTROL}, or cut "
+          f"the network with --zmax and --amax.",
           file=sys.stderr, flush=True)
 
 
@@ -267,9 +297,10 @@ def cmd_evolve(args):
     times = time_grid(args.t0, args.t1, args.steps, args.log_time)
     thermo = constant_thermo(args.t9 or z.temperature9(), args.rho or z.density())
     _warn_if_large(n, z, thermo)
-    progress = _Progress(times, args.progress) if args.progress > 0 else None
+    progress = _Progress(times, args.progress, args) if args.progress > 0 else None
     res = evolve_zone(n, z, times, thermo=thermo, method=args.method,
-                      rtol=args.rtol, atol=args.atol, progress=progress)
+                      rtol=args.rtol, atol=args.atol, max_change=args.max_change,
+                      min_mass_fraction=args.min_mass_fraction, progress=progress)
     # A failed solve still carries a full abundance vector, and a positivity
     # projection that had to invent baryon number also reports failure here.
     # Printing the numbers without the verdict would make either look like an
@@ -473,6 +504,8 @@ def build_parser():
     s.add_argument('--amax', type=int, help='keep only nuclides with A <= AMAX, and the reactions among them')
     s.add_argument('--rtol', type=float, default=1e-6, help='relative tolerance of the SciPy integrators (default 1e-6)')
     s.add_argument('--atol', type=float, default=1e-30, help='absolute tolerance on the abundances (default 1e-30, which makes the relative tolerance govern every abundance; 1e-12 is often enough and much faster)')
+    s.add_argument('--max-change', type=float, default=0.005, metavar='FRACTION', help='adaptive_implicit_euler only: the largest fractional change of an abundance in one step (default 0.005; 0.05 suits explosive burning)')
+    s.add_argument('--min-mass-fraction', type=float, default=1e-15, metavar='X', help='adaptive_implicit_euler only: abundances with a smaller mass fraction do not limit the step (default 1e-15)')
     s.add_argument('--progress', type=float, default=30.0, metavar='SECONDS', help='report progress on standard error every SECONDS of computing time (default 30; 0 turns it off)')
 
     s = command('energy-generation', cmd_energy, 'print the nuclear energy generation rate of a zone, in erg/g/s')
