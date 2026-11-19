@@ -4,7 +4,9 @@ The script builds a sequence of progressively larger networks from a JINA /
 libnucnet database by applying charge and mass-number cuts, then measures the
 costs that dominate a reaction-network calculation: reading the database,
 evaluating the right-hand side, forming the Jacobian, and integrating a
-one-zone trajectory.
+one-zone trajectory with BDF and with the adaptive implicit Euler integrator.
+Each integration is stopped after ``--evolve-timeout`` seconds, so that a case
+that cannot finish is recorded as such instead of holding up the run.
 
 It writes a JSON record and a LaTeX table so that the performance table of the
 accompanying manuscript can be regenerated from a single command.
@@ -98,10 +100,43 @@ def environment_record() -> Dict[str, str]:
     }
 
 
+class _OutOfTime(BaseException):
+    """Raised from the progress hook to stop an integration at its time limit.
+
+    A BaseException, so that no ``except Exception`` on the way catches it.
+    """
+
+
+def timed_evolution(net, zone, times, thermo, timeout: float, **options) -> Dict[str, object]:
+    """Integrate one zone, stopping after ``timeout`` seconds; return a record."""
+    reached = [float(times[0])]
+    start = time.perf_counter()
+
+    def watch(t):
+        reached[0] = max(reached[0], float(t))
+        if time.perf_counter() - start > timeout:
+            raise _OutOfTime()
+
+    try:
+        result = evolve_zone(net, zone, times, thermo=thermo, progress=watch, **options)
+    except _OutOfTime:
+        return {"seconds": time.perf_counter() - start, "success": False,
+                "timed_out": True, "reached_time": reached[0],
+                "message": f"stopped after {timeout:g} s at t = {reached[0]:.3e} s"}
+    record = {"seconds": time.perf_counter() - start, "success": bool(result.success),
+              "timed_out": False, "message": str(result.message),
+              "nfev": int(result.nfev), "njev": int(result.njev), "steps": int(result.steps)}
+    if result.success and len(result.y):
+        record["final_xsum"] = float(sum(
+            net.species[k].a * v for k, v in result.final_abundances.items() if k in net.species))
+    return record
+
+
 def benchmark_case(base_net, label: str, zmax: Optional[int], amax: Optional[int],
                    t9: float, rho: float, t_end: float, steps: int,
-                   rtol: float, atol: float, evolve_limit: int,
-                   evolve_timeout: float) -> Dict[str, object]:
+                   rtol: float, atol: float, evolve_limit: Optional[int],
+                   evolve_timeout: float, fd_limit: int, aie_max_change: float,
+                   aie_min_mass_fraction: float) -> Dict[str, object]:
     """Benchmark one network size and return a record of the measurements."""
     net = copy.deepcopy(base_net)
     if zmax is not None:
@@ -134,12 +169,12 @@ def benchmark_case(base_net, label: str, zmax: Optional[int], amax: Optional[int
     f(0.0, y0)  # warm up caches before timing
     record["rhs_seconds"] = _time_repeated(lambda: f(0.0, y0))
 
-    # Jacobians.  The finite-difference matrix costs N+1 right-hand sides, so it
-    # is skipped once that becomes the dominant cost of the whole benchmark.
+    # Jacobians.  The finite-difference matrix costs N+1 right-hand sides and
+    # is dense, so it is skipped above --fd-limit species.
     ja = analytic_jacobian(net, species, thermo, sparse=True)
     ja(0.0, y0)
     record["jacobian_analytic_seconds"] = _time_repeated(lambda: ja(0.0, y0), min_repeats=5, budget=2.0)
-    if n_species <= evolve_limit:
+    if n_species <= fd_limit:
         jf = jacobian(net, species, thermo, sparse=True)
         jf(0.0, y0)  # warm up before timing, as for the analytic matrix
         # Both Jacobians are timed the same way.  A single sample of either is
@@ -161,26 +196,28 @@ def benchmark_case(base_net, label: str, zmax: Optional[int], amax: Optional[int
     record["baryon_residual"] = float(sum(
         net.species[s].a * v for s, v in zip(species, dy) if s in net.species))
 
-    # One-zone integration.  Large networks are reported without an evolution
-    # rather than allowed to run unbounded.
-    if n_species <= evolve_limit:
+    # One-zone integrations, each stopped at --evolve-timeout: BDF with the
+    # given tolerances, and adaptive implicit Euler with the given step control.
+    if evolve_limit is None or n_species <= evolve_limit:
         times = time_grid(0.0, t_end, steps)
-        t0 = time.perf_counter()
-        result = evolve_zone(net, zone, times, thermo=thermo, method="bdf",
-                             rtol=rtol, atol=atol)
-        record["evolve_seconds"] = time.perf_counter() - t0
-        record["evolve_success"] = bool(result.success)
-        record["evolve_message"] = str(result.message)
-        record["nfev"] = int(result.nfev)
-        record["njev"] = int(result.njev)
-        if result.success and len(result.y):
-            final = result.final_abundances
-            record["final_xsum"] = float(sum(
-                net.species[k].a * v for k, v in final.items() if k in net.species))
+        bdf = timed_evolution(net, zone, times, thermo, evolve_timeout,
+                              method="bdf", rtol=rtol, atol=atol)
+        record["evolve_seconds"] = bdf["seconds"]
+        record["evolve_success"] = bdf["success"]
+        record["evolve_message"] = bdf["message"]
+        record["evolve_timed_out"] = bdf["timed_out"]
+        for key in ("nfev", "njev", "final_xsum"):
+            if key in bdf:
+                record[key] = bdf[key]
+        record["aie"] = timed_evolution(net, zone, times, thermo, evolve_timeout,
+                                        method="adaptive_implicit_euler",
+                                        max_change=aie_max_change,
+                                        min_mass_fraction=aie_min_mass_fraction)
     else:
         record["evolve_seconds"] = None
         record["evolve_success"] = None
         record["evolve_message"] = f"skipped: {n_species} species exceeds --evolve-limit"
+        record["aie"] = None
 
     # Process high-water mark, not the cost of this case; see peak_memory_mb.
     record["process_peak_memory_mb"] = peak_memory_mb()
@@ -192,28 +229,40 @@ def latex_table(records: List[Dict[str, object]], env: Dict[str, str]) -> str:
     def fmt(value, spec: str, missing: str = "--"):
         return missing if value is None else format(value, spec)
 
+    def evolution(seconds, success, timed_out):
+        # A dagger marks a run that NucNetPy rejects (a failed solve, or a
+        # positivity projection that broke conservation); "$>$" one stopped
+        # at its time limit.
+        if seconds is None:
+            return "--"
+        if timed_out:
+            return r"$>$%.0f" % seconds
+        return ("%.1f" % seconds) + ("" if success else r"$^\dagger$")
+
     lines = [
         "% Generated by validation/benchmark_performance.py -- do not edit by hand.",
         "%% Environment: Python %s, NumPy %s, SciPy %s" % (env["python"], env["numpy"], env["scipy"]),
         "%% Platform: %s" % env["platform"],
         r"\small",
-        r"\begin{tabular}{lrrrrrr}",
+        r"\begin{tabular}{lrrrrrrr}",
         r"\toprule",
         r"Case & Species & Reactions & RHS & $J$ analytic & $J$ numerical & "
-        r"Evolution\\",
-        r" & & & (ms) & (ms) & (ms) & (s)\\",
+        r"BDF & AIE\\",
+        r" & & & (ms) & (ms) & (ms) & (s) & (s)\\",
         r"\midrule",
     ]
     for r in records:
         if "error" in r:
             continue
+        aie = r.get("aie") or {}
         lines.append(
-            "%s & %d & %d & %s & %s & %s & %s\\\\" % (
+            "%s & %d & %d & %s & %s & %s & %s & %s\\\\" % (
                 r["label"], r["species"], r["reactions"],
-                fmt(r.get("rhs_seconds") and r["rhs_seconds"] * 1e3, ".2f"),
+                fmt(r.get("rhs_seconds") and r["rhs_seconds"] * 1e3, ".3f"),
                 fmt(r.get("jacobian_analytic_seconds") and r["jacobian_analytic_seconds"] * 1e3, ".2f"),
                 fmt(r.get("jacobian_fd_seconds") and r["jacobian_fd_seconds"] * 1e3, ".1f"),
-                fmt(r.get("evolve_seconds"), ".1f"),
+                evolution(r.get("evolve_seconds"), r.get("evolve_success"), r.get("evolve_timed_out")),
+                evolution(aie.get("seconds"), aie.get("success"), aie.get("timed_out")),
             )
         )
     lines += [r"\bottomrule", r"\end{tabular}"]
@@ -232,9 +281,16 @@ def main() -> int:
     ap.add_argument("--steps", type=int, default=60)
     ap.add_argument("--rtol", type=float, default=1.0e-6)
     ap.add_argument("--atol", type=float, default=1.0e-12)
-    ap.add_argument("--evolve-limit", type=int, default=400,
-                    help="skip integration and finite-difference Jacobian above this species count")
-    ap.add_argument("--evolve-timeout", type=float, default=600.0)
+    ap.add_argument("--evolve-limit", type=int, default=None,
+                    help="skip the integrations above this species count (default: integrate every case)")
+    ap.add_argument("--evolve-timeout", type=float, default=600.0,
+                    help="stop each integration after this many seconds (default %(default)s)")
+    ap.add_argument("--fd-limit", type=int, default=2500,
+                    help="skip the finite-difference Jacobian above this species count (default %(default)s)")
+    ap.add_argument("--aie-max-change", type=float, default=0.05,
+                    help="max_change of the adaptive implicit Euler integrations (default %(default)s)")
+    ap.add_argument("--aie-min-mass-fraction", type=float, default=1e-10,
+                    help="min_mass_fraction of the adaptive implicit Euler integrations (default %(default)s)")
     ap.add_argument("--json", default="benchmark.json")
     ap.add_argument("--latex", default="benchmark.tex")
     args = ap.parse_args()
@@ -254,7 +310,8 @@ def main() -> int:
         print(f"--- {label} ---", flush=True)
         rec = benchmark_case(base, label, zmax, amax, args.t9, args.rho,
                              args.t_end, args.steps, args.rtol, args.atol,
-                             args.evolve_limit, args.evolve_timeout)
+                             args.evolve_limit, args.evolve_timeout, args.fd_limit,
+                             args.aie_max_change, args.aie_min_mass_fraction)
         records.append(rec)
         print(json.dumps(rec), flush=True)
 
@@ -277,7 +334,10 @@ def main() -> int:
             "is not the memory cost of the individual case",
         },
         "conditions": {"t9": args.t9, "rho": args.rho, "t_end": args.t_end,
-                       "steps": args.steps, "rtol": args.rtol, "atol": args.atol},
+                       "steps": args.steps, "rtol": args.rtol, "atol": args.atol,
+                       "evolve_timeout": args.evolve_timeout, "fd_limit": args.fd_limit,
+                       "aie_max_change": args.aie_max_change,
+                       "aie_min_mass_fraction": args.aie_min_mass_fraction},
         "cases": records,
     }
     Path(args.json).write_text(json.dumps(payload, indent=2))

@@ -4,13 +4,33 @@ The changes in each release of NucNetPy. Every release is archived on Zenodo
 with its own DOI; [10.5281/zenodo.20756797](https://doi.org/10.5281/zenodo.20756797)
 covers all versions and resolves to the latest.
 
-## Unreleased
+## 1.2.0 (2026-11-18)
 
 ### Changed
 
-- Every command now has a one-line description in `nucnetpy --help`.
+- The right-hand side and the analytic Jacobian evaluate every reaction at
+  once, with NumPy arrays and a sparse stoichiometric matrix, instead of in a
+  Python loop over the reactions. On a network of 900 species and 10,800
+  reactions one right-hand side takes 0.4 ms instead of 110 ms, and the
+  analytic Jacobian 2 ms instead of 60 ms. The results do not change: on the
+  test machine every number of the demonstration record and of the archived
+  reference case is the same to the last digit.
+- `jacobian_sparsity` builds the pattern as a sparse matrix from the start.
+- `evolve-zone` reports the cost of one right-hand side above 1000 species,
+  and suggests settings that get through explosive burning when an
+  integration advances too slowly to finish.
+- Every command has a one-line description in `nucnetpy --help`.
 - The documentation describes the package as it is; the history of each
   release is kept here.
+
+### Added
+
+- `evolve-zone --max-change` and `--min-mass-fraction`, the step control of
+  the adaptive implicit Euler integrator.
+- `validation/benchmark_performance.py` integrates every network size, with
+  BDF and with adaptive implicit Euler, and stops each integration after
+  `--evolve-timeout` seconds; `--fd-limit` bounds the size up to which it
+  times the finite-difference Jacobian.
 
 ## 1.1.1 (2026-11-17)
 

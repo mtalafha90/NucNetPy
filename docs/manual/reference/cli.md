@@ -389,7 +389,8 @@ usage: nucnetpy evolve-zone [-h] [--zone-index ZONE_INDEX] [--t0 T0] [--t1 T1]
                             [--method {bdf,radau,lsoda,rk45,dop853,adaptive_implicit_euler,rk4,euler,implicit_euler,backward_euler}]
                             [--log-time] [--min-abundance MIN_ABUNDANCE]
                             [--zmax ZMAX] [--amax AMAX] [--rtol RTOL]
-                            [--atol ATOL] [--progress SECONDS]
+                            [--atol ATOL] [--max-change FRACTION]
+                            [--min-mass-fraction X] [--progress SECONDS]
                             xml
 
 integrate a zone in time at constant T9 and rho
@@ -417,6 +418,14 @@ options:
   --atol ATOL           absolute tolerance on the abundances (default 1e-30,
                         which makes the relative tolerance govern every
                         abundance; 1e-12 is often enough and much faster)
+  --max-change FRACTION
+                        adaptive_implicit_euler only: the largest fractional
+                        change of an abundance in one step (default 0.005;
+                        0.05 suits explosive burning)
+  --min-mass-fraction X
+                        adaptive_implicit_euler only: abundances with a
+                        smaller mass fraction do not limit the step (default
+                        1e-15)
   --progress SECONDS    report progress on standard error every SECONDS of
                         computing time (default 30; 0 turns it off)
 ```

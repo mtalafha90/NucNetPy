@@ -1,12 +1,15 @@
 """One-zone and multi-zone evolution tools.
 
 This layer implements the standard stoichiometric ODE interface and provides
-fixed-step, SciPy BDF/Radau/LSODA, optional sparse Jacobians, positivity
-projection, screening hooks, and weak-rate source terms.
+fixed-step, SciPy BDF/Radau/LSODA and adaptive implicit Euler integrators,
+sparse Jacobians, positivity projection, screening hooks, and weak-rate source
+terms.  The right-hand side and the analytic Jacobian evaluate all the
+reactions at once, as arrays.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 import numpy as np
 
@@ -82,34 +85,260 @@ class EvolutionResult:
         return self.y * np.asarray(factors, dtype=float)[None, :]
 
 
-def _ye_from_vec(species, yvec, species_map=None) -> float:
-    from .species import Species
-    total = 0.0
-    for s, y in zip(species, yvec):
-        try:
-            sp = species_map.get(s) if species_map else Species.parse(s)
-            if sp is None:
-                sp = Species.parse(s)
-            total += sp.z * max(float(y), 0.0)
-        except Exception:
-            continue
-    return float(total)
+def _exp_of_fit(exponent: float) -> float:
+    """``exp`` as :meth:`RateFit.rate` takes it: infinite above 700, zero below -745.
+
+    ``math.exp`` rather than ``numpy.exp``, which can differ in the last bit.
+    """
+    if exponent > 700:
+        return math.inf
+    if exponent < -745:
+        return 0.0
+    return math.exp(exponent)
+
+
+class _NetworkArrays:
+    """The reactions among a set of evolved species, held as arrays.
+
+    It is built once per right-hand side or Jacobian.  Each evaluation is then
+    a few NumPy operations and one sparse matrix product, instead of a Python
+    loop over the reactions.  The arithmetic follows :meth:`Reaction.rate` and
+    :meth:`Reaction.flux` term by term and in the same order, so the two agree
+    to rounding error.
+
+    The parts of a rate that depend on the temperature alone (the ReacLib fits
+    with their partition-function factors, and any tabulated, constant or
+    computed rate) are evaluated once for each temperature.  The electron
+    density of an electron capture and any screening factor are applied at
+    every evaluation.  The reactions and their rate parameters are read when
+    the arrays are built: change the network afterwards and build them again.
+    """
+
+    def __init__(self, network: Network, species: Sequence[str]):
+        from scipy.sparse import csr_matrix
+        from .species import Species
+
+        self.species = list(species)
+        self.index = {s: i for i, s in enumerate(self.species)}
+        n = self.n = len(self.species)
+        self.reactions = list(network.reactions.reactions)
+        m = self.m = len(self.reactions)
+        width = max([len(r.nuclear_reactants) for r in self.reactions] + [1])
+        # One slot per nuclear reactant.  Unused slots point at entry n of the
+        # extended abundance vector, which holds 1, with a power of 0.
+        self.slot_index = np.full((m, width), n, dtype=np.int64)
+        self.slot_power = np.zeros((m, width), dtype=np.int64)
+        # A reaction with a reactant outside the evolved set has a zero flow,
+        # because that reactant's abundance is zero.
+        self.active = np.ones(m, dtype=bool)
+        self.density_power = np.zeros(m, dtype=np.int64)
+        self.statistical = np.ones(m)
+        self.electrons = np.zeros(m, dtype=np.int64)
+        rows, cols, values, coefficients, owners = [], [], [], [], []
+        self.other_rates, self.partition = [], []
+        for k, r in enumerate(self.reactions):
+            for j, p in enumerate(r.nuclear_reactants):
+                if p.species in self.index:
+                    self.slot_index[k, j] = self.index[p.species]
+                    self.slot_power[k, j] = p.count
+                else:
+                    self.active[k] = False
+            self.density_power[k] = max(r.reactant_order - 1, 0)
+            self.statistical[k] = max(r.statistical_factor(), 1)
+            self.electrons[k] = r.electron_count
+            for name, nu in r.stoichiometry().items():
+                if nu and name in self.index and not is_massless(name):
+                    rows.append(self.index[name])
+                    cols.append(k)
+                    values.append(float(nu))
+            for fit in r.rate_fits:
+                a = list(fit.coefficients)
+                if len(a) != 7:
+                    raise ValueError("ReacLib RateFit requires exactly 7 coefficients")
+                coefficients.append([float(c) for c in a])
+                owners.append(k)
+            if (r.constant_rate is not None or r.tabular_rate is not None
+                    or r.rate_function is not None):
+                self.other_rates.append(k)
+            if r.partition_ratio is not None:
+                self.partition.append(k)
+        #: ``dY_i/dt = sum_r stoichiometry[i, r] * flow_r``.
+        self.stoichiometry = csr_matrix((values, (rows, cols)), shape=(n, m))
+        self.coefficients = np.asarray(coefficients, dtype=float).reshape(-1, 7)
+        self.owners = np.asarray(owners, dtype=np.int64)
+        self.captures = np.nonzero(self.electrons)[0]
+        # Charges for Ye = sum Z Y: from the nuclide record, else from the
+        # name; a name that is not a nuclide contributes nothing.
+        charges = np.zeros(n)
+        for i, s in enumerate(self.species):
+            try:
+                sp = network.species.get(s) if network.species else None
+                charges[i] = (sp if sp is not None else Species.parse(s)).z
+            except Exception:
+                charges[i] = 0.0
+        self.charges = charges
+        # For each slot, the reactions whose reactant there appears once, and
+        # those where it appears more than once (p + p, 3 alpha, ...).  The
+        # latter take Python's power, as Reaction.flux does; numpy.power can
+        # differ from it in the last bit.
+        self._single = [np.nonzero(self.slot_power[:, j] == 1)[0] for j in range(width)]
+        self._repeated = [np.nonzero(self.slot_power[:, j] > 1)[0] for j in range(width)]
+        self._t9 = None
+        self._other = self._fitted = None
+        self._abundance = np.ones(n + 1)
+
+    def electron_fraction(self, y: np.ndarray) -> float:
+        """``Ye = sum_i Z_i Y_i``, summed one term at a time in species order."""
+        if self.n == 0:
+            return 0.0
+        return float(np.cumsum(self.charges * y)[-1])
+
+    def _temperature_parts(self, t9: float):
+        """Rate parts that depend on T9 alone, cached for the last T9."""
+        if self._t9 is not None and t9 == self._t9:
+            return self._other, self._fitted
+        t9c = max(float(t9), 1e-30)
+        t13 = t9c ** (1.0 / 3.0)
+        a = self.coefficients
+        # The sum of RateFit.rate, in its order.
+        exponent = a[:, 0] + a[:, 1] / t9c
+        exponent += a[:, 2] / t13
+        exponent += a[:, 3] * t13
+        exponent += a[:, 4] * t9c
+        exponent += a[:, 5] * (t9c ** (5.0 / 3.0))
+        exponent += a[:, 6] * math.log(t9c)
+        values = np.array([_exp_of_fit(e) for e in exponent.tolist()])
+        fitted = np.bincount(self.owners, weights=values, minlength=self.m)
+        for k in self.partition:
+            if fitted[k]:
+                fitted[k] *= self.reactions[k].partition_ratio(t9)
+        other = np.zeros(self.m)
+        for k in self.other_rates:
+            r = self.reactions[k]
+            total = 0.0
+            if r.constant_rate is not None:
+                total += float(r.constant_rate)
+            if r.tabular_rate is not None:
+                total += r.tabular_rate.rate(t9)
+            if r.rate_function is not None:
+                total += float(r.rate_function(t9))
+            other[k] = total
+        self._t9, self._other, self._fitted = t9, other, fitted
+        return other, fitted
+
+    def prefactors(self, t9: float, rho: float, ye: float, screening=None) -> np.ndarray:
+        """``lambda_r rho^(n_r - 1) / prod_i m_ir!`` for every reaction.
+
+        Zero for a reaction with a reactant outside the evolved set.
+        """
+        other, fitted = self._temperature_parts(t9)
+        if len(self.captures):
+            fitted = fitted.copy()
+            for k in self.captures:
+                if fitted[k]:
+                    fitted[k] *= (float(rho) * float(ye)) ** int(self.electrons[k])
+        rate = other + fitted
+        if screening is not None:
+            for k in np.nonzero(self.active)[0]:
+                r = self.reactions[k]
+                try:
+                    rate[k] *= float(screening(r, float(t9), float(rho), ye))
+                except TypeError:
+                    rate[k] *= float(screening(r))
+        powers = [float(rho) ** p for p in range(int(self.density_power.max(initial=0)) + 1)]
+        with np.errstate(over="ignore", invalid="ignore"):
+            prefactor = rate * np.asarray(powers)[self.density_power] / self.statistical
+        prefactor[~self.active] = 0.0
+        return prefactor
+
+    def extended(self, y: np.ndarray) -> np.ndarray:
+        """The abundances with a final entry of 1 for the unused reactant slots."""
+        self._abundance[:self.n] = y
+        return self._abundance
+
+    def _powers(self, yext: np.ndarray, k: np.ndarray, slot: int, powers) -> np.ndarray:
+        """``Y ** power`` with Python's power, for reactions ``k`` at ``slot``."""
+        out = []
+        for base, power in zip(yext[self.slot_index[k, slot]].tolist(), list(powers)):
+            try:
+                out.append(base ** int(power))
+            except OverflowError:
+                out.append(math.inf)
+        return np.array(out, dtype=float)
+
+    def flows(self, y: np.ndarray, prefactor: np.ndarray) -> np.ndarray:
+        """``F_r = prefactor_r prod_i Y_i^m_ir``, in the order of Reaction.flux."""
+        yext = self.extended(y)
+        flow = prefactor.copy()
+        with np.errstate(over="ignore", invalid="ignore"):
+            for j in range(self.slot_index.shape[1]):
+                k = self._single[j]
+                flow[k] *= yext[self.slot_index[k, j]]
+                k = self._repeated[j]
+                if len(k):
+                    flow[k] *= self._powers(yext, k, j, self.slot_power[k, j])
+        return flow
+
+    def flow_derivatives(self, y: np.ndarray, prefactor: np.ndarray):
+        """``dF_r/dY_j`` as a sparse (reactions x species) matrix."""
+        from scipy.sparse import csr_matrix
+        yext = self.extended(y)
+        width = self.slot_index.shape[1]
+        rows, cols, values = [], [], []
+        with np.errstate(over="ignore", invalid="ignore"):
+            for pos in range(width):
+                power = self.slot_power[:, pos]
+                k = np.nonzero((power > 0) & (prefactor != 0.0))[0]
+                if not len(k):
+                    continue
+                # The factor of this slot replaced by m Y^(m - 1), the others
+                # kept, multiplied in the same order as the flow itself.
+                term = prefactor[k] * power[k]
+                # Y^0 = 1 needs no multiplication and Y^1 = Y exactly; only a
+                # reactant that appears three or more times needs a power.
+                twice, more = power[k] == 2, power[k] > 2
+                term[twice] *= yext[self.slot_index[k[twice], pos]]
+                if more.any():
+                    term[more] *= self._powers(yext, k[more], pos, power[k][more] - 1)
+                for other in range(width):
+                    if other != pos:
+                        m = self.slot_power[k, other]
+                        single, repeated = m == 1, m > 1
+                        term[single] *= yext[self.slot_index[k[single], other]]
+                        if repeated.any():
+                            term[repeated] *= self._powers(yext, k[repeated], other, m[repeated])
+                keep = term != 0.0
+                rows.append(k[keep])
+                cols.append(self.slot_index[k[keep], pos])
+                values.append(term[keep])
+        if rows:
+            rows, cols, values = np.concatenate(rows), np.concatenate(cols), np.concatenate(values)
+        return csr_matrix((values, (rows, cols)), shape=(self.m, self.n))
 
 
 def rhs(network: Network, species: Sequence[str], thermo: ThermoFunction, screening: Optional[ScreeningFunction] = None, weak_rates: Optional[Sequence[object]] = None):
+    """Return ``f(t, y)``, the time derivative ``dY/dt`` of the abundances ``y``.
+
+    ``y`` holds the abundances of ``species``, in that order.  Negative
+    abundances are treated as zero.  ``thermo(t, abundances)`` gives T9 and
+    the density.  Each call evaluates every reaction among the species at
+    once, as arrays (see :class:`_NetworkArrays`), and agrees with
+    :meth:`ReactionNetwork.ydot` to rounding error.
+    """
+    from .reactions import _refresh_screening
     species = [normalize_species_name(s) for s in species]
-    idx = {s: i for i, s in enumerate(species)}
+    arrays = _NetworkArrays(network, species)
+    idx = arrays.index
 
     def f(t: float, yvec: np.ndarray) -> np.ndarray:
         yclip = np.clip(np.asarray(yvec, dtype=float), 0.0, np.inf)
-        abund = {s: float(yclip[i]) for s, i in idx.items()}
+        abund = dict(zip(species, yclip.tolist()))
         t9, rho = thermo(float(t), abund)
-        ye = _ye_from_vec(species, yclip, network.species)
-        dy = network.reactions.ydot(abund, t9=t9, rho=rho, screening=screening, ye=ye)
-        out = np.zeros_like(yclip, dtype=float)
-        for name, val in dy.items():
-            if name in idx:
-                out[idx[name]] += val
+        ye = arrays.electron_fraction(yclip)
+        if screening is not None:
+            _refresh_screening(screening, abund, t9, rho, ye)
+        prefactor = arrays.prefactors(t9, rho, ye, screening)
+        out = arrays.stoichiometry @ arrays.flows(yclip, prefactor)
         if weak_rates:
             for wr in weak_rates:
                 parent = getattr(wr, 'parent', None)
@@ -164,87 +393,72 @@ def analytic_jacobian(network: Network, species: Sequence[str], thermo: ThermoFu
     correct when ``Y_j`` vanishes, which is the usual state of most species at
     the start of a calculation.
 
-    The whole matrix costs one sweep over the reaction list, whereas the
-    finite-difference Jacobian of :func:`jacobian` costs ``N+1`` evaluations of
-    the full right-hand side.  The saving therefore grows linearly with the
-    number of evolved species.
+    The derivatives of all the flows are evaluated at once, as arrays, and
+    the matrix is their product with the sparse stoichiometric matrix, so it
+    is built sparse from the start.  The finite-difference Jacobian of
+    :func:`jacobian` instead costs ``N+1`` evaluations of the full right-hand
+    side.
 
     ``lambda_r`` is treated as independent of composition.  With a screening
     function or weak-rate tables that depend on ``Ye`` the result is an
     approximate Jacobian: it changes the Newton convergence rate of an implicit
     solver but not the solution it converges to.
-    """
-    species = [normalize_species_name(s) for s in species]
-    idx = {s: i for i, s in enumerate(species)}
-    n = len(species)
 
-    # Precompute the per-reaction index/multiplicity structure once.
-    compiled = []
-    for r in network.reactions.reactions:
-        nuclear = r.nuclear_reactants
-        reactants = [(idx[p.species], p.count) for p in nuclear if p.species in idx]
-        if len(reactants) != len(nuclear):
-            continue  # reaction touches species outside the evolved set
-        stoich = [(idx[name], nu) for name, nu in r.stoichiometry().items() if name in idx]
-        if not stoich:
-            continue
-        compiled.append((r, reactants, stoich, r.reactant_order, max(r.statistical_factor(), 1)))
+    Returns a SciPy CSC matrix, or a dense array when ``sparse`` is false.
+    """
+    from scipy.sparse import coo_matrix
+    species = [normalize_species_name(s) for s in species]
+    arrays = _NetworkArrays(network, species)
+    idx = arrays.index
+    n = len(species)
 
     def j(t: float, yvec: np.ndarray):
         y = np.clip(np.asarray(yvec, dtype=float), 0.0, np.inf)
-        abund = {s: float(y[i]) for s, i in idx.items()}
+        abund = dict(zip(species, y.tolist()))
         t9, rho = thermo(float(t), abund)
-        ye = _ye_from_vec(species, y, network.species)
-        J = np.zeros((n, n), dtype=float)
-        for r, reactants, stoich, order, stat in compiled:
-            lam = r.rate(t9, rho=rho, ye=ye, screening=screening)
-            if lam == 0.0:
-                continue
-            pref = lam * (float(rho) ** max(order - 1, 0)) / stat
-            for pos, (jx, mj) in enumerate(reactants):
-                # d/dY_j of the reactant product, with the j-th factor replaced
-                # by m_j Y_j^{m_j - 1}.
-                term = pref * mj * (y[jx] ** (mj - 1))
-                for other, (kx, mk) in enumerate(reactants):
-                    if other != pos:
-                        term *= y[kx] ** mk
-                if term == 0.0:
-                    continue
-                for ix, nu in stoich:
-                    J[ix, jx] += nu * term
+        ye = arrays.electron_fraction(y)
+        prefactor = arrays.prefactors(t9, rho, ye, screening)
+        J = arrays.stoichiometry @ arrays.flow_derivatives(y, prefactor)
         if weak_rates:
+            rows, cols, values = [], [], []
             for wr in weak_rates:
                 parent = getattr(wr, 'parent', None)
                 daughter = getattr(wr, 'daughter', None)
                 if parent in idx and daughter in idx:
                     rate = wr.rate(t9, rho * max(ye, 1e-30))
-                    J[idx[parent], idx[parent]] -= rate
-                    J[idx[daughter], idx[parent]] += rate
-        if sparse:
-            try:
-                from scipy.sparse import csc_matrix
-                return csc_matrix(J)
-            except Exception:
-                return J
-        return J
+                    rows += [idx[parent], idx[daughter]]
+                    cols += [idx[parent], idx[parent]]
+                    values += [-rate, rate]
+            if rows:
+                J = J + coo_matrix((values, (rows, cols)), shape=(n, n))
+        J = J.tocsc()
+        J.eliminate_zeros()
+        J.sort_indices()
+        return J if sparse else J.toarray()
     return j
 
 
 def jacobian_sparsity(network: Network, species: Sequence[str]):
+    """Return the stoichiometric sparsity pattern, as a boolean CSC matrix.
+
+    Entry ``(i, j)`` is set when species ``j`` is a reactant of a reaction
+    that changes species ``i``.
+    """
+    from scipy.sparse import csc_matrix
     species = [normalize_species_name(s) for s in species]
     idx = {s: i for i, s in enumerate(species)}
-    mat = np.zeros((len(species), len(species)), dtype=bool)
+    rows, cols = [], []
     for r in network.reactions.reactions:
         affected = [idx[n] for n in r.stoichiometry() if n in idx]
         deps = [idx[p.species] for p in r.reactants if p.species in idx]
         for a in affected:
             for d in deps:
-                mat[a, d] = True
-    try:
-        from scipy.sparse import csc_matrix
-        return csc_matrix(mat)
-    except Exception:
-        return mat
+                rows.append(a)
+                cols.append(d)
+    pattern = csc_matrix((np.ones(len(rows), dtype=bool), (rows, cols)),
+                         shape=(len(species), len(species)), dtype=bool)
+    pattern.sum_duplicates()
+    return pattern
 
 
 def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Optional[ThermoFunction] = None, method: str = "bdf", species: Optional[Sequence[str]] = None, screening: Optional[ScreeningFunction] = None, weak_rates: Optional[Sequence[object]] = None, rtol: float = 1e-6, atol: float = 1e-30, use_jacobian: bool = True, project_positive: bool = True, jac_mode: str = "analytic", max_change: float = 0.005, min_mass_fraction: float = 1e-15, progress: Optional[Callable[[float], None]] = None) -> EvolutionResult:
@@ -265,13 +479,16 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
     can predict a slightly negative abundance of the fuel; the right-hand
     side treats it as zero, which stops every reaction that consumes the
     fuel, and SciPy's step size collapses.  Implicit Euler cannot turn a
-    decaying abundance negative.  ``rtol``, ``atol``, ``use_jacobian`` and
+    decaying abundance negative.  In explosive burning, ``max_change=0.05``
+    with ``min_mass_fraction=1e-10`` is usually accurate to a fraction of a per
+    cent and many times faster than the defaults; check it by repeating the
+    run with a smaller ``max_change``.  ``rtol``, ``atol``, ``use_jacobian`` and
     ``jac_mode`` do not apply to it.
 
     ``jac_mode`` selects how the Jacobian is supplied to the implicit SciPy
     solvers.  ``"analytic"`` (the default) uses :func:`analytic_jacobian`, which
-    differentiates the stoichiometric flows in closed form and costs one sweep
-    over the reaction list.  ``"numerical"`` uses the finite-difference
+    differentiates the stoichiometric flows in closed form for all the
+    reactions at once.  ``"numerical"`` uses the finite-difference
     :func:`jacobian`, costing ``N+1`` right-hand-side evaluations.  ``"sparsity"``
     supplies no Jacobian and instead passes the stoichiometric sparsity pattern
     so that SciPy estimates the matrix by grouped finite differences.
