@@ -3,7 +3,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from ..io.xml import read_xml, write_xml
+from ..io.xml import read_xml, write_xml, write_evolution_xml
 from ..io.jina import read_jina_xml, combine_jina_xml, jina_database_summary
 from ..analysis import (
     charge_changing_flows,
@@ -222,10 +222,11 @@ def _duration(seconds: float) -> str:
 class _Progress:
     """Report how far an integration has got, on standard error.
 
-    Called with the time the integrator has reached; prints at most once per
-    ``interval`` seconds of computing time, so a short run prints nothing.
-    If two successive reports find the integration crawling (see
-    ``SLOW_FRACTION``), it also says what to try instead, once.
+    ``evolve_zone`` calls it after every accepted step with the time reached,
+    so it counts the steps and takes the step size from successive times.  It
+    prints at most once per ``interval`` seconds of computing time, so a short
+    run prints nothing.  If two successive reports find the integration
+    crawling (see ``SLOW_FRACTION``), it also says what to try instead, once.
     """
 
     def __init__(self, times, interval: float, args=None):
@@ -235,21 +236,26 @@ class _Progress:
         self.args = args
         self.start = self.last = time.perf_counter()
         self.reached = float(times[0])
+        self.steps = 0
+        self.step = 0.0
         self.previous = None
         self.advised = False
 
     def __call__(self, t: float) -> None:
         import time
         import numpy as np
+        self.steps += 1
+        self.step = float(t) - self.reached
         self.reached = max(self.reached, float(t))
         now = time.perf_counter()
         if now - self.last < self.interval:
             return
         self.last = now
         done = int(np.searchsorted(self.times, self.reached, side="right")) - 1
-        print(f"evolve-zone: reached t = {self.reached:.4g} s of {self.times[-1]:.4g} s "
-              f"({done} of {len(self.times) - 1} output times) after "
-              f"{_duration(now - self.start)}", file=sys.stderr, flush=True)
+        print(f"evolve-zone: t = {self.reached:.4g} s of {self.times[-1]:.4g} s | "
+              f"step {self.steps}, dt = {self.step:.2g} s | "
+              f"{done} of {len(self.times) - 1} output times | "
+              f"after {_duration(now - self.start)}", file=sys.stderr, flush=True)
         covered = self.reached - float(self.times[0])
         span = float(self.times[-1]) - float(self.times[0])
         if (not self.advised and self.previous is not None and span > 0
@@ -352,22 +358,96 @@ def cmd_evolve(args):
     times = time_grid(args.t0, t1, args.steps, args.log_time)
     thermo = constant_thermo(t9, rho)
     _warn_if_large(n, z, thermo)
+    # The folder is made before the integration, so that a long run never ends
+    # unable to save its results.
+    folder, created = (None, False) if args.no_output else _output_folder(args.output)
+    target = None if folder is None else folder / "output.xml"
+    if target is not None:
+        print(f"evolve-zone: the results will be saved in {target}", file=sys.stderr, flush=True)
     progress = _Progress(times, args.progress, args) if args.progress > 0 else None
-    res = evolve_zone(n, z, times, thermo=thermo, method=args.method,
-                      rtol=args.rtol, atol=args.atol, max_change=args.max_change,
-                      min_mass_fraction=args.min_mass_fraction, progress=progress,
-                      first_step=dt)
+    import time
+    start = time.perf_counter()
+    try:
+        res = evolve_zone(n, z, times, thermo=thermo, method=args.method,
+                          rtol=args.rtol, atol=args.atol, max_change=args.max_change,
+                          min_mass_fraction=args.min_mass_fraction, progress=progress,
+                          first_step=dt)
+        elapsed = time.perf_counter() - start
+        saved = None
+        if target is not None and len(res.time):
+            saved = (target, write_evolution_xml(n, res, target, thermo=thermo,
+                                                 min_abundance=args.min_abundance))
+    finally:
+        if created and not any(folder.iterdir()):
+            folder.rmdir()
     # A failed solve still carries a full abundance vector, and a positivity
     # projection that had to invent baryon number also reports failure here.
-    # Printing the numbers without the verdict would make either look like an
-    # ordinary result, so the status goes out first and sets the exit code.
-    print(f"success {res.success} nfev {res.nfev} njev {res.njev}")
+    # The summary therefore opens with the verdict, which also sets the exit code.
+    for line in _summary(n, res, args.method, elapsed, saved):
+        print(line)
     if not res.success:
         print(f"error: {res.message}", file=sys.stderr)
-    for s, y in sorted(res.final_abundances.items()):
-        if y >= args.min_abundance:
-            print(s, f"{y:.12e}")
     return 0 if res.success else 1
+
+
+def _output_folder(requested):
+    """The folder a run saves its results in, and whether it was made now.
+
+    Without ``requested``, a new folder named after the date and time, in the
+    current directory.  An ``output.xml`` already in the folder is refused,
+    rather than overwritten after the run.
+    """
+    from datetime import datetime
+    if requested:
+        folder = Path(requested)
+    else:
+        stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        folder, k = Path(f"evolve-zone_{stamp}"), 2
+        while folder.exists():
+            folder, k = Path(f"evolve-zone_{stamp}_{k}"), k + 1
+    if (folder / "output.xml").exists():
+        raise FileExistsError(f"{folder / 'output.xml'} already exists; choose another "
+                              "--output folder, or move the file away")
+    created = not folder.exists()
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder, created
+
+
+def _summary(network, res, method, elapsed, saved):
+    """The lines that end a run: the verdict, the cost, conservation and the result."""
+    import numpy as np
+    from ..species import Species
+    lines = [f"evolve-zone: finished in {_duration(elapsed)}: "
+             + ("success" if res.success else "FAILED")]
+    if not len(res.time):
+        lines.append("  the integration produced no output, so nothing was saved")
+        return lines
+    counts = [f"{res.steps} steps" + (f" ({res.rejected_steps} rejected)"
+                                       if method == "adaptive_implicit_euler" else "")]
+    if res.nfev:
+        counts.append(f"{res.nfev} right-hand sides")
+    if res.njev:
+        counts.append(f"{res.njev} Jacobians")
+    lines.append("  " + ", ".join(counts))
+    nuclides = [network.species.get(s) or Species.parse(s) for s in res.species]
+    a = np.array([sp.a for sp in nuclides], dtype=float)
+    charge = np.array([sp.z for sp in nuclides], dtype=float)
+    first, last = np.asarray(res.y[0], dtype=float), np.asarray(res.y[-1], dtype=float)
+    xsum = float(a @ last)
+    lines.append(f"  sum X = {xsum:.12g} (changed by {xsum - float(a @ first):.1e} during "
+                 f"the run), Ye = {float(charge @ last):.6g}")
+    x = a * last
+    order = [i for i in np.argsort(-x, kind="stable")[:10] if x[i] > 0]
+    lines.append(f"  largest mass fractions at t = {float(res.time[-1]):.4g} s:")
+    for row in range(0, len(order), 3):
+        lines.append("    " + "   ".join(f"{res.species[i]:<6} {x[i]:.3e}"
+                                         for i in order[row:row + 3]))
+    if saved is not None:
+        path, zones = saved
+        lines.append(f"  saved: {path} ({zones} zones, one per output time"
+                     + (")" if res.success else "; the run failed, so do not trust them)"))
+        lines.append(f"  final abundances: nucnetpy zone-abundances {path} --zone-index {zones - 1}")
+    return lines
 
 
 def cmd_energy(args):
@@ -546,7 +626,7 @@ def build_parser():
     s.add_argument('species', help='species name, such as fe56')
 
     # Evolution
-    s = command('evolve-zone', cmd_evolve, 'integrate a zone in time at constant T9 and rho')
+    s = command('evolve-zone', cmd_evolve, 'integrate a zone in time at constant T9 and rho, and save its history')
     s.add_argument('--zone-index', type=int, default=0)
     s.add_argument('--t0', type=float, default=0.0, help='start time in seconds (default 0)')
     s.add_argument('--t1', type=float, help="end time in seconds (default: the zone's tend property, else 1)")
@@ -556,7 +636,7 @@ def build_parser():
     s.add_argument('--dt', type=float, help="first time step in seconds (default: the zone's dt property; without either, the integrator chooses)")
     s.add_argument('--method', default='bdf', type=str.lower, choices=METHODS)
     s.add_argument('--log-time', action='store_true')
-    s.add_argument('--min-abundance', type=float, default=0.0)
+    s.add_argument('--min-abundance', type=float, default=0.0, metavar='Y', help='leave out of the saved file the abundances smaller than Y (default 0: every positive abundance is saved)')
     s.add_argument('--zmax', type=int, help='keep only nuclides with Z <= ZMAX, and the reactions among them')
     s.add_argument('--amax', type=int, help='keep only nuclides with A <= AMAX, and the reactions among them')
     s.add_argument('--rtol', type=float, default=1e-6, help='relative tolerance of the SciPy integrators (default 1e-6)')
@@ -564,6 +644,9 @@ def build_parser():
     s.add_argument('--max-change', type=float, default=0.005, metavar='FRACTION', help='adaptive_implicit_euler only: the largest fractional change of an abundance in one step (default 0.005; 0.05 suits explosive burning)')
     s.add_argument('--min-mass-fraction', type=float, default=1e-15, metavar='X', help='adaptive_implicit_euler only: abundances with a smaller mass fraction do not limit the step (default 1e-15)')
     s.add_argument('--progress', type=float, default=30.0, metavar='SECONDS', help='report progress on standard error every SECONDS of computing time (default 30; 0 turns it off)')
+    saving = s.add_mutually_exclusive_group()
+    saving.add_argument('--output', metavar='FOLDER', help='folder to save the results in, as output.xml: one zone per output time, in the libnucnet format of NucNet Tools (default: a new folder evolve-zone_DATE_TIME in the current directory)')
+    saving.add_argument('--no-output', action='store_true', help='save nothing; only print the summary')
 
     s = command('energy-generation', cmd_energy, 'print the nuclear energy generation rate of a zone, in erg/g/s')
     zone_and_conditions(s)

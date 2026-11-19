@@ -63,7 +63,8 @@ class EvolutionResult:
     message: str = ""
     nfev: int = 0
     njev: int = 0
-    #: Accepted and rejected steps; counted by ``adaptive_implicit_euler`` only.
+    #: Accepted steps, counted for every method; rejected steps, counted by
+    #: ``adaptive_implicit_euler`` only.
     steps: int = 0
     rejected_steps: int = 0
 
@@ -470,10 +471,10 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
     interval.  It is cut to the length of the integration if longer, and the
     fixed-step methods ignore it.
 
-    ``progress``, if given, is called with the time the integrator has reached:
-    on every right-hand-side evaluation for the SciPy methods, and after every
-    accepted step for ``adaptive_implicit_euler``.  It lets a caller report on
-    a long integration; it must not change anything.
+    ``progress``, if given, is called after every accepted step with the time
+    the integrator has reached, whatever the method, so the number of calls is
+    the number of steps and successive times give the step size.  It lets a
+    caller report on a long integration; it must not change anything.
 
     ``method="adaptive_implicit_euler"`` takes implicit (backward) Euler steps
     solved by Newton-Raphson iterations, the scheme NucNet Tools uses, and
@@ -530,16 +531,18 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
                                         weak_rates, max_change, min_mass_fraction,
                                         progress=progress, first_step=first_step)
     f = rhs(network, species, thermo, screening=screening, weak_rates=weak_rates)
-    if progress is not None:
-        _rhs = f
+    steps = [0]
 
-        def f(t, y):
+    def report(t):
+        steps[0] += 1
+        if progress is not None:
             progress(t)
-            return _rhs(t, y)
+
     if method_l in _SCIPY_METHODS:
         try:
             from scipy.integrate import solve_ivp
-            kwargs = dict(method=_SCIPY_METHODS[method_l], rtol=rtol, atol=atol)
+            kwargs = dict(method=_reporting_solver(_SCIPY_METHODS[method_l], report),
+                          rtol=rtol, atol=atol)
             if first_step is not None:
                 kwargs["first_step"] = first_step
             if use_jacobian and method_l in {"bdf", "radau"}:
@@ -558,12 +561,14 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
             # RK4 pass keeps such environments usable, but it is an explicit
             # method on a stiff system, so it is only reported as successful
             # when it actually produced a finite trajectory.
-            res = _fixed_step(f, y0, ts, "rk4", project_positive=project_positive)
+            steps[0] = 0
+            res = _fixed_step(f, y0, ts, "rk4", project_positive=project_positive,
+                              progress=report)
             ok = bool(np.all(np.isfinite(res)))
             msg = f"SciPy {method} unavailable ({exc}); used rk4 fallback"
             if not ok:
                 msg += "; rk4 fallback diverged"
-            return EvolutionResult(ts, species, res, ok, msg)
+            return EvolutionResult(ts, species, res, ok, msg, steps=steps[0])
         # A stiff solve that fails may return before emitting any output, in
         # which case sol.y is an empty list rather than an array.  Report the
         # failure and the solver's own diagnosis instead of substituting an
@@ -572,16 +577,38 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
         if y.size == 0:
             return EvolutionResult(np.asarray(sol.t, dtype=float).reshape(0), species,
                                    np.zeros((0, len(species))), False, str(sol.message),
-                                   getattr(sol, 'nfev', 0), getattr(sol, 'njev', 0))
+                                   getattr(sol, 'nfev', 0), getattr(sol, 'njev', 0),
+                                   steps=steps[0])
         y = y.T
         success, message = bool(sol.success), str(sol.message)
         if project_positive:
             y, success, message = _project_positive(network, species, y, success, message)
-        return EvolutionResult(sol.t, species, y, success, message, getattr(sol, 'nfev', 0), getattr(sol, 'njev', 0))
-    res = _fixed_step(f, y0, ts, method_l, project_positive=project_positive)
+        return EvolutionResult(sol.t, species, y, success, message, getattr(sol, 'nfev', 0),
+                               getattr(sol, 'njev', 0), steps=steps[0])
+    res = _fixed_step(f, y0, ts, method_l, project_positive=project_positive, progress=report)
     ok = bool(np.all(np.isfinite(res)))
     msg = f"fixed-step {method_l}" + ("" if ok else " diverged (non-finite abundances)")
-    return EvolutionResult(ts, species, res, ok, msg)
+    return EvolutionResult(ts, species, res, ok, msg, steps=steps[0])
+
+
+def _reporting_solver(name: str, report: Callable[[float], None]):
+    """SciPy's solver class ``name``, calling ``report(t)`` after every accepted step.
+
+    ``solve_ivp`` takes the class in place of the method's name.  The class
+    only watches: ``step`` takes the solver's own step, rejections and all,
+    and then reports the time reached, so the arithmetic is SciPy's own.
+    """
+    import scipy.integrate
+
+    class Reporting(getattr(scipy.integrate, name)):
+        def step(self):
+            message = super().step()
+            if self.status != "failed":
+                report(self.t)
+            return message
+
+    Reporting.__name__ = Reporting.__qualname__ = name
+    return Reporting
 
 
 def _adaptive_implicit_euler(network: Network, species: Sequence[str], y0: np.ndarray,
@@ -755,7 +782,7 @@ def _project_positive(network: Network, species: Sequence[str], y: np.ndarray,
     return clipped, success, message
 
 
-def _fixed_step(f, y0, ts, method, project_positive=True):
+def _fixed_step(f, y0, ts, method, project_positive=True, progress=None):
     ys = np.zeros((len(ts), len(y0)), dtype=float)
     ys[0] = y0
     for i in range(1, len(ts)):
@@ -773,6 +800,8 @@ def _fixed_step(f, y0, ts, method, project_positive=True):
             k4 = f(t + h, y + h*k3)
             yn = y + h*(k1 + 2*k2 + 2*k3 + k4)/6.0
         ys[i] = np.clip(yn, 0.0, np.inf) if project_positive else yn
+        if progress is not None:
+            progress(ts[i])
     return ys
 
 

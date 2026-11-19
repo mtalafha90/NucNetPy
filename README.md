@@ -336,6 +336,39 @@ Halving `--max-change` changes the hydrogen and helium abundances by less than
 0.2 per cent, which is the check to make on your own case. `evolve-zone`
 suggests these settings itself when an integration crawls.
 
+### What a run reports and saves
+
+While it runs, `evolve-zone` reports on standard error every 30 s
+(`--progress`): the time reached, the number of steps and the size of the
+last one, and how many output times are done.
+
+```text
+evolve-zone: t = 1.25e-05 s of 1 s | step 2335, dt = 4e-07 s | 0 of 49 output times | after 2 min 30 s
+```
+
+When it ends, it prints a short summary instead of every abundance: the
+verdict, the cost, the conservation check and the largest mass fractions.
+
+```text
+evolve-zone: finished in 3 min 56 s: success
+  4626 steps (12 rejected), 14727 right-hand sides, 1773 Jacobians
+  sum X = 0.999999999996 (changed by -4.4e-12 during the run), Ye = 0.8530
+  largest mass fractions at t = 1 s:
+    h1     6.712e-01   he4    9.774e-02   ni56   5.145e-02
+    ...
+  saved: evolve-zone_2026-11-19_06-31-05/output.xml (50 zones, one per output time)
+```
+
+Every run saves its whole history in a new folder named after the date and
+time: `output.xml` holds one zone per output time, with its time, `t9` and
+`rho`, in the libnucnet format that NucNet Tools writes. wnutils reads it, and
+so do the `nucnetpy` commands that look at zones, such as `largest-x`,
+`zone-abundances`, `species-history` and `print-output`. `--output FOLDER`
+chooses the folder, `--no-output` saves nothing, and `--min-abundance` leaves
+the smallest abundances out of the file. A run never overwrites an earlier
+`output.xml`. In Python, `write_evolution_xml(net, result, "output.xml",
+thermo=thermo)` writes the same file.
+
 ---
 
 ## Screening and energy release
@@ -446,7 +479,7 @@ tools. A selection:
 | `charge-flows` | per-reaction dYe/dt contributions |
 | `timescales` | shortest species timescales Y/\|dY/dt\| |
 | `conservation`, `validate` | A/Z conservation and network validation |
-| `evolve-zone` | integrate one zone in time |
+| `evolve-zone` | integrate one zone in time and save its history |
 | `nse` | nuclear statistical equilibrium solve (`--coulomb` for plasma corrections) |
 | `qse` | constrained cluster equilibrium (libnuceq-style) |
 | `energy-generation`, `entropy-generation` | energy and entropy generation rates |

@@ -1,4 +1,4 @@
-from .xml import read_xml, write_xml, read_network_xml, write_zone_xml
+from .xml import read_xml, write_xml, read_network_xml, write_zone_xml, write_evolution_xml
 try:
     from .hdf5 import read_hdf5, write_hdf5
 except Exception:  # optional h5py

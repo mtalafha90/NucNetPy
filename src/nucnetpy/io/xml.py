@@ -512,6 +512,92 @@ def write_xml(network: Network, path: str | Path) -> None:
 write_zone_xml = write_xml
 
 
+def write_evolution_xml(network: Network, result, path: str | Path, thermo=None,
+                        min_abundance: float = 0.0) -> int:
+    """Write an evolution as a libnucnet output file, one zone per output time.
+
+    The file has the layout of a NucNet Tools output file: the nuclear data of
+    the evolved nuclides, then a zone for each output time of ``result`` (an
+    :class:`~nucnetpy.solver.EvolutionResult`).  The zones are labelled by the
+    index of the output time, from 0 for the start, and carry the time and,
+    when ``thermo`` is given, ``t9`` and ``rho`` as properties.  Each lists the
+    mass fractions of the nuclides whose abundance is positive and at least
+    ``min_abundance``.  wnutils reads the file, and so do :func:`read_xml` and
+    the ``print-output``, ``species-history`` and ``zone-abundances`` commands.
+
+    libnucnet requires a spin for every nuclide in the nuclear data, so a
+    nuclide without a known spin, or without nuclear data at all, is left out
+    of it; its mass fractions are still written, with its Z and A.  The
+    partition functions are written as libnucnet stores them, as
+    ``log10_partf``, the inverse of what :func:`read_xml` does.
+
+    The file is written as it is built, so a long history of a large network
+    needs little memory.  Returns the number of zones written.
+    """
+    import math
+    from xml.sax.saxutils import escape, quoteattr
+    from ..species import is_massless
+
+    def num(value) -> str:
+        # The shortest decimal that reads back as the same double.
+        return repr(float(value))
+
+    skip = set(network.species_without_nuclear_data())
+    nuclides = {}
+    for name in result.species:
+        key = normalize_species_name(name)
+        if is_massless(key):
+            continue
+        sp = network.species.get(key)
+        if sp is None:
+            try:
+                sp = Species.parse(key)
+            except ValueError:  # not a nuclide name: nothing to write
+                continue
+        nuclides[key] = sp
+    with open(path, "w", encoding="utf-8") as out:
+        out.write("<?xml version='1.0' encoding='utf-8'?>\n<libnucnet_input>\n")
+        out.write("  <nuclear_data>\n")
+        for key, sp in sorted(nuclides.items(), key=lambda kv: (kv[1].z, kv[1].a, kv[0])):
+            if key in skip or key not in network.species or sp.spin is None:
+                continue
+            out.write(f"    <nuclide>\n      <z>{sp.z}</z>\n      <a>{sp.a}</a>\n")
+            if sp.source:
+                out.write(f"      <source>{escape(str(sp.source))}</source>\n")
+            out.write(f"      <mass_excess>{num(sp.mass_excess)}</mass_excess>\n"
+                      f"      <spin>{num(sp.spin)}</spin>\n")
+            points = [(t9, g) for t9, g in sorted(sp.partition.items()) if g > 0]
+            if points:
+                out.write("      <partf_table>\n")
+                for t9, g in points:
+                    out.write(f"        <point><t9>{num(t9)}</t9>"
+                              f"<log10_partf>{num(math.log10(g))}</log10_partf></point>\n")
+                out.write("      </partf_table>\n")
+            out.write("    </nuclide>\n")
+        out.write("  </nuclear_data>\n  <zone_data>\n")
+        names = [normalize_species_name(s) for s in result.species]
+        written = 0
+        for k, (t, y) in enumerate(zip(result.time, result.y)):
+            out.write(f'    <zone label1="{k}" label2="0" label3="0">\n'
+                      "      <optional_properties>\n"
+                      f'        <property name="time">{num(t)}</property>\n')
+            if thermo is not None:
+                t9, rho = thermo(t, y)
+                out.write(f'        <property name="t9">{num(t9)}</property>\n'
+                          f'        <property name="rho">{num(rho)}</property>\n')
+            out.write("      </optional_properties>\n      <mass_fractions>\n")
+            for name, value in zip(names, y):
+                sp = nuclides.get(name)
+                if sp is None or not value > 0.0 or value < min_abundance:
+                    continue
+                out.write(f"        <nuclide name={quoteattr(name)}><z>{sp.z}</z><a>{sp.a}</a>"
+                          f"<x>{num(sp.a * value)}</x></nuclide>\n")
+            out.write("      </mass_fractions>\n    </zone>\n")
+            written += 1
+        out.write("  </zone_data>\n</libnucnet_input>\n")
+    return written
+
+
 def read_xml_string(text: str, reverse_partition_functions: bool = True) -> Network:
     root = ET.fromstring(text)
     return read_xml_root(root, source='string',
