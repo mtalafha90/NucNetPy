@@ -4,7 +4,7 @@ The changes in each release of NucNetPy. Every release is archived on Zenodo
 with its own DOI; [10.5281/zenodo.20756797](https://doi.org/10.5281/zenodo.20756797)
 covers all versions and resolves to the latest.
 
-## 1.2.0 (2026-11-18)
+## 1.2.0 (2026-11-19)
 
 ### Changed
 
@@ -25,12 +25,21 @@ covers all versions and resolves to the latest.
   and suggests settings that get through explosive burning when two
   successive progress reports find an integration crawling. It does not
   repeat settings already in use.
+- `evolve-zone` takes the temperature, density, end time and first step from
+  the zone's `t9` (or `t9_0`), `rho` (or `rho_0`), `tend` and `dt` properties
+  whenever `--t9`, `--rho`, `--t1` or `--dt` is left out, as NucNet Tools
+  does, and reports on standard error which values it uses and where they
+  came from. It refuses to run without a temperature or a density, which it
+  used to take as 1 without a word; the end time still defaults to 1 s.
 - Every command has a one-line description in `nucnetpy --help`.
 - The documentation describes the package as it is; the history of each
   release is kept here.
 
 ### Added
 
+- `evolve-zone --dt` and `evolve_zone(..., first_step=...)`: the first time
+  step of the SciPy and adaptive implicit Euler integrators.
+- `Zone.end_time()`, `Zone.time_step()` and `Zone.find_property()`.
 - `evolve-zone --max-change` and `--min-mass-fraction`, the step control of
   the adaptive implicit Euler integrator.
 - `validation/benchmark_performance.py` integrates every network size, with

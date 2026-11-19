@@ -8,6 +8,16 @@ import numpy as np
 from .species import Species, normalize_species_name, mass_fraction
 from .reactions import ReactionNetwork
 
+#: Zone properties, in order of preference, that hold the conditions of a
+#: calculation, as NucNet Tools zone files name them: the temperature (in
+#: units of 10^9 K, or in kelvin for ``temperature``), the density (g/cm^3),
+#: the end time and the first time step (s).
+TEMPERATURE_PROPERTIES = ("t9", "T9", "temperature9", "temperature", "t9_0")
+DENSITY_PROPERTIES = ("rho", "density", "rho_0")
+END_TIME_PROPERTIES = ("tend",)
+TIME_STEP_PROPERTIES = ("dt",)
+
+
 @dataclass
 class Zone:
     label: Tuple[str, str, str] = ("0", "0", "0")
@@ -41,20 +51,41 @@ class Zone:
     def xsum(self, species_map: Optional[Mapping[str, Species]] = None) -> float:
         return float(sum(self.mass_fractions(species_map).values()))
 
-    def temperature9(self, default: float = 1.0) -> float:
+    def find_property(self, names: Sequence[str]) -> Tuple[Optional[str], Optional[str]]:
+        """Return ``(name, value)`` of the first of ``names`` the zone holds.
+
+        Both the properties written on the ``<zone>`` element and those in
+        its ``<optional_properties>`` count; where a name appears in both, the
+        former wins.  Returns ``(None, None)`` if the zone holds none of them.
+        """
         props = {**self.optional_properties, **self.properties}
-        for key in ("t9", "T9", "temperature9", "temperature", "t9_0"):
+        for key in names:
             if key in props:
-                val = float(props[key])
-                return val / 1.0e9 if key == "temperature" and val > 1e6 else val
-        return default
+                return key, props[key]
+        return None, None
+
+    def temperature9(self, default: float = 1.0) -> float:
+        """The temperature in units of 10^9 K, from :data:`TEMPERATURE_PROPERTIES`."""
+        key, value = self.find_property(TEMPERATURE_PROPERTIES)
+        if key is None:
+            return default
+        val = float(value)
+        return val / 1.0e9 if key == "temperature" and val > 1e6 else val
 
     def density(self, default: float = 1.0) -> float:
-        props = {**self.optional_properties, **self.properties}
-        for key in ("rho", "density", "rho_0"):
-            if key in props:
-                return float(props[key])
-        return default
+        """The density in g/cm^3, from :data:`DENSITY_PROPERTIES`."""
+        key, value = self.find_property(DENSITY_PROPERTIES)
+        return default if key is None else float(value)
+
+    def end_time(self, default: Optional[float] = None) -> Optional[float]:
+        """The end time of a calculation in seconds, from the ``tend`` property."""
+        key, value = self.find_property(END_TIME_PROPERTIES)
+        return default if key is None else float(value)
+
+    def time_step(self, default: Optional[float] = None) -> Optional[float]:
+        """The first time step of a calculation in seconds, from the ``dt`` property."""
+        key, value = self.find_property(TIME_STEP_PROPERTIES)
+        return default if key is None else float(value)
 
 @dataclass
 class Network:

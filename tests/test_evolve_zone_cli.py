@@ -135,3 +135,111 @@ def test_advice_does_not_repeat_the_settings_in_use(capsys):
     err = capsys.readouterr().err
     assert "hint:" in err and "--zmax" in err
     assert "--max-change" not in err and "--min-mass-fraction" not in err
+
+
+# --- run conditions from the zone, as in NucNet Tools ------------------------
+
+def _zone_file(tmp_path, **props):
+    """The golden network with its zone's properties replaced by ``props``."""
+    from nucnetpy import write_xml
+    net = read_xml(GOLDEN)
+    zone = net.zone(0)
+    zone.properties.clear()
+    zone.optional_properties.clear()
+    zone.optional_properties.update({k: str(v) for k, v in props.items()})
+    path = tmp_path / "zone_network.xml"
+    write_xml(net, path)
+    return str(path)
+
+
+def _spy(monkeypatch):
+    seen = {}
+    real = cli.evolve_zone
+
+    def spy(net, zone, times, **kwargs):
+        seen.update(kwargs, times=times)
+        return real(net, zone, times, **kwargs)
+
+    monkeypatch.setattr(cli, "evolve_zone", spy)
+    return seen
+
+
+def test_conditions_come_from_the_zone(tmp_path, monkeypatch, capsys):
+    path = _zone_file(tmp_path, t9_0=0.4, rho_0=2e4, tend=1e-3, dt=1e-7)
+    seen = _spy(monkeypatch)
+    assert main(["evolve-zone", path, "--steps", "3", "--progress", "0"]) == 0
+    assert seen["times"][-1] == pytest.approx(1e-3)
+    assert seen["first_step"] == pytest.approx(1e-7)
+    assert seen["thermo"](0.0, {}) == (0.4, 2e4)
+    err = capsys.readouterr().err
+    for name in ("zone property t9_0", "zone property rho_0", "zone property tend",
+                 "zone property dt"):
+        assert name in err
+
+
+def test_options_override_the_zone(tmp_path, monkeypatch, capsys):
+    path = _zone_file(tmp_path, t9_0=0.4, rho_0=2e4, tend=1e-3, dt=1e-7)
+    seen = _spy(monkeypatch)
+    assert main(["evolve-zone", path, "--steps", "3", "--progress", "0", "--t9", "0.3",
+                 "--rho", "1e3", "--t1", "2e-3", "--dt", "1e-9"]) == 0
+    assert seen["times"][-1] == pytest.approx(2e-3)
+    assert seen["first_step"] == pytest.approx(1e-9)
+    assert seen["thermo"](0.0, {}) == (0.3, 1e3)
+    err = capsys.readouterr().err
+    assert "(--t9)" in err and "(--t1)" in err and "(--dt)" in err
+
+
+def test_without_end_time_or_step_the_defaults_are_said(tmp_path, monkeypatch, capsys):
+    path = _zone_file(tmp_path, t9=0.4, rho=2e4)
+    seen = _spy(monkeypatch)
+    assert main(["evolve-zone", path, "--steps", "3", "--progress", "0"]) == 0
+    assert seen["times"][-1] == 1.0 and seen["first_step"] is None
+    err = capsys.readouterr().err
+    assert "(default)" in err and "chosen by the integrator" in err
+
+
+def test_a_run_without_temperature_or_density_is_refused(tmp_path, capsys):
+    path = _zone_file(tmp_path, tend=1e-3)
+    assert main(["evolve-zone", path, "--progress", "0"]) == 1
+    err = capsys.readouterr().err
+    assert "no temperature" in err and "--t9" in err
+    assert "no density" in err and "--rho" in err
+
+
+@pytest.mark.parametrize("method", ["bdf", "adaptive_implicit_euler"])
+def test_first_step_reaches_the_integrator(monkeypatch, method):
+    import scipy.integrate
+    net = read_xml(GOLDEN)
+    times = time_grid(0.0, 1e-2, 4)
+    seen = {}
+    real = scipy.integrate.solve_ivp
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(scipy.integrate, "solve_ivp", spy)
+    reached = []
+    result = evolve_zone(net, net.zone(0), times, method=method, first_step=1e-9,
+                         progress=reached.append)
+    assert result.success
+    if method == "bdf":
+        assert seen["first_step"] == 1e-9
+    else:
+        assert reached[0] == pytest.approx(1e-9)
+
+
+def test_a_first_step_longer_than_the_run_is_cut():
+    net = read_xml(GOLDEN)
+    result = evolve_zone(net, net.zone(0), time_grid(0.0, 1e-6, 3), first_step=1.0)
+    assert result.success
+
+
+def test_zone_reads_end_time_and_time_step():
+    from nucnetpy import Zone
+    zone = Zone(optional_properties={"tend": "3.15e7", "dt": "1e-5", "t9_0": "0.2"},
+                properties={"dt": "1e-4"})
+    assert zone.end_time() == 3.15e7
+    assert zone.time_step() == 1e-4          # a property on <zone> wins
+    assert zone.find_property(("t9", "t9_0")) == ("t9_0", "0.2")
+    assert Zone().end_time() is None and Zone().end_time(5.0) == 5.0

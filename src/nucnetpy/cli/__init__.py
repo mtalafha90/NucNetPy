@@ -303,21 +303,60 @@ def _warn_if_large(n, z, thermo) -> None:
           file=sys.stderr, flush=True)
 
 
+def _run_conditions(args, z):
+    """T9, rho, end time and first step of an evolve-zone run, with their sources.
+
+    An option wins over the zone's property, as NucNet Tools reads its zone
+    files.  Without either, the end time is 1 s and the integrator chooses the
+    first step.  The temperature and the density have no default: a run at an
+    assumed temperature gives a plausible but meaningless composition.
+    """
+    from ..core import (DENSITY_PROPERTIES, END_TIME_PROPERTIES,
+                        TEMPERATURE_PROPERTIES, TIME_STEP_PROPERTIES)
+
+    def pick(value, option, names, read):
+        if value is not None:
+            return value, option
+        key, _ = z.find_property(names)
+        return (None, None) if key is None else (read(), f"zone property {key}")
+
+    t9, t9_from = pick(args.t9, "--t9", TEMPERATURE_PROPERTIES, z.temperature9)
+    rho, rho_from = pick(args.rho, "--rho", DENSITY_PROPERTIES, z.density)
+    t1, t1_from = pick(args.t1, "--t1", END_TIME_PROPERTIES, z.end_time)
+    dt, dt_from = pick(args.dt, "--dt", TIME_STEP_PROPERTIES, z.time_step)
+    missing = []
+    if t9 is None:
+        missing.append("no temperature: give --t9, or a t9 or t9_0 property in the zone")
+    if rho is None:
+        missing.append("no density: give --rho, or a rho or rho_0 property in the zone")
+    if missing:
+        raise ValueError("; ".join(missing))
+    if t1 is None:
+        t1, t1_from = 1.0, "default"
+    return t9, t9_from, rho, rho_from, t1, t1_from, dt, dt_from
+
+
 def cmd_evolve(args):
     from ..network_limiter import limit_network, select_species
     n = _load(args.xml)
     z = n.zone(args.zone_index)
+    t9, t9_from, rho, rho_from, t1, t1_from, dt, dt_from = _run_conditions(args, z)
+    first = (f"first step {dt:g} s ({dt_from})" if dt is not None
+             else "first step chosen by the integrator")
+    print(f"evolve-zone: T9 = {t9:g} ({t9_from}), rho = {rho:g} g/cm^3 ({rho_from}), "
+          f"t = {args.t0:g} to {t1:g} s ({t1_from}), {first}", file=sys.stderr, flush=True)
     if args.zmax is not None or args.amax is not None:
         # Keep the nuclides inside the cut and the reactions among them;
         # photons and leptons stay, so photodisintegrations and decays survive.
         limit_network(n, select_species(n, zmax=args.zmax, amax=args.amax))
-    times = time_grid(args.t0, args.t1, args.steps, args.log_time)
-    thermo = constant_thermo(args.t9 or z.temperature9(), args.rho or z.density())
+    times = time_grid(args.t0, t1, args.steps, args.log_time)
+    thermo = constant_thermo(t9, rho)
     _warn_if_large(n, z, thermo)
     progress = _Progress(times, args.progress, args) if args.progress > 0 else None
     res = evolve_zone(n, z, times, thermo=thermo, method=args.method,
                       rtol=args.rtol, atol=args.atol, max_change=args.max_change,
-                      min_mass_fraction=args.min_mass_fraction, progress=progress)
+                      min_mass_fraction=args.min_mass_fraction, progress=progress,
+                      first_step=dt)
     # A failed solve still carries a full abundance vector, and a positivity
     # projection that had to invent baryon number also reports failure here.
     # Printing the numbers without the verdict would make either look like an
@@ -509,11 +548,12 @@ def build_parser():
     # Evolution
     s = command('evolve-zone', cmd_evolve, 'integrate a zone in time at constant T9 and rho')
     s.add_argument('--zone-index', type=int, default=0)
-    s.add_argument('--t0', type=float, default=0.0)
-    s.add_argument('--t1', type=float, default=1.0)
-    s.add_argument('--steps', type=int, default=50)
-    s.add_argument('--t9', type=float)
-    s.add_argument('--rho', type=float)
+    s.add_argument('--t0', type=float, default=0.0, help='start time in seconds (default 0)')
+    s.add_argument('--t1', type=float, help="end time in seconds (default: the zone's tend property, else 1)")
+    s.add_argument('--steps', type=int, default=50, help='number of output times (default 50)')
+    s.add_argument('--t9', type=float, help="temperature in units of 10^9 K (default: the zone's t9 or t9_0 property)")
+    s.add_argument('--rho', type=float, help="density in g/cm^3 (default: the zone's rho or rho_0 property)")
+    s.add_argument('--dt', type=float, help="first time step in seconds (default: the zone's dt property; without either, the integrator chooses)")
     s.add_argument('--method', default='bdf', type=str.lower, choices=METHODS)
     s.add_argument('--log-time', action='store_true')
     s.add_argument('--min-abundance', type=float, default=0.0)

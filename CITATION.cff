@@ -26,7 +26,7 @@ url: "https://github.com/mtalafha90/NucNetPy"
 repository-code: "https://github.com/mtalafha90/NucNetPy"
 license: GPL-3.0-or-later
 version: "1.2.0"
-date-released: "2026-11-18"
+date-released: "2026-11-19"
 doi: 10.5281/zenodo.20756797
 identifiers:
   - type: doi

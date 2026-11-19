@@ -385,7 +385,7 @@ options:
 
 ```
 usage: nucnetpy evolve-zone [-h] [--zone-index ZONE_INDEX] [--t0 T0] [--t1 T1]
-                            [--steps STEPS] [--t9 T9] [--rho RHO]
+                            [--steps STEPS] [--t9 T9] [--rho RHO] [--dt DT]
                             [--method {bdf,radau,lsoda,rk45,dop853,adaptive_implicit_euler,rk4,euler,implicit_euler,backward_euler}]
                             [--log-time] [--min-abundance MIN_ABUNDANCE]
                             [--zmax ZMAX] [--amax AMAX] [--rtol RTOL]
@@ -401,11 +401,16 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   --zone-index ZONE_INDEX
-  --t0 T0
-  --t1 T1
-  --steps STEPS
-  --t9 T9
-  --rho RHO
+  --t0 T0               start time in seconds (default 0)
+  --t1 T1               end time in seconds (default: the zone's tend
+                        property, else 1)
+  --steps STEPS         number of output times (default 50)
+  --t9 T9               temperature in units of 10^9 K (default: the zone's t9
+                        or t9_0 property)
+  --rho RHO             density in g/cm^3 (default: the zone's rho or rho_0
+                        property)
+  --dt DT               first time step in seconds (default: the zone's dt
+                        property; without either, the integrator chooses)
   --method {bdf,radau,lsoda,rk45,dop853,adaptive_implicit_euler,rk4,euler,implicit_euler,backward_euler}
   --log-time
   --min-abundance MIN_ABUNDANCE

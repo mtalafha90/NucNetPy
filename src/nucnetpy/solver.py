@@ -461,8 +461,14 @@ def jacobian_sparsity(network: Network, species: Sequence[str]):
     return pattern
 
 
-def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Optional[ThermoFunction] = None, method: str = "bdf", species: Optional[Sequence[str]] = None, screening: Optional[ScreeningFunction] = None, weak_rates: Optional[Sequence[object]] = None, rtol: float = 1e-6, atol: float = 1e-30, use_jacobian: bool = True, project_positive: bool = True, jac_mode: str = "analytic", max_change: float = 0.005, min_mass_fraction: float = 1e-15, progress: Optional[Callable[[float], None]] = None) -> EvolutionResult:
+def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Optional[ThermoFunction] = None, method: str = "bdf", species: Optional[Sequence[str]] = None, screening: Optional[ScreeningFunction] = None, weak_rates: Optional[Sequence[object]] = None, rtol: float = 1e-6, atol: float = 1e-30, use_jacobian: bool = True, project_positive: bool = True, jac_mode: str = "analytic", max_change: float = 0.005, min_mass_fraction: float = 1e-15, progress: Optional[Callable[[float], None]] = None, first_step: Optional[float] = None) -> EvolutionResult:
     """Evolve one zone over ``times``.
+
+    ``first_step`` sets the first time step, as the ``dt`` property of a
+    NucNet Tools zone file does.  By default SciPy chooses it, and
+    ``adaptive_implicit_euler`` takes a thousandth of the first output
+    interval.  It is cut to the length of the integration if longer, and the
+    fixed-step methods ignore it.
 
     ``progress``, if given, is called with the time the integrator has reached:
     on every right-hand-side evaluation for the SciPy methods, and after every
@@ -508,6 +514,11 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
         raise ValueError(f"unknown method {method!r}; choose one of: {', '.join(METHODS)}")
     if str(jac_mode).lower() not in _JAC_MODES:
         raise ValueError(f"unknown jac_mode {jac_mode!r}; choose one of: {', '.join(_JAC_MODES)}")
+    if first_step is not None:
+        first_step = float(first_step)
+        if not first_step > 0.0:
+            raise ValueError(f"first_step must be positive, not {first_step!r}")
+        first_step = min(first_step, float(ts[-1] - ts[0]))
     # Photons and leptons are part of the reaction records but not of the
     # abundance vector; evolving them would integrate a meaningless quantity.
     species = [normalize_species_name(s) for s in (species or network.species_names())]
@@ -517,7 +528,7 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
     if method_l in _ADAPTIVE_METHODS:
         return _adaptive_implicit_euler(network, species, y0, ts, thermo, screening,
                                         weak_rates, max_change, min_mass_fraction,
-                                        progress=progress)
+                                        progress=progress, first_step=first_step)
     f = rhs(network, species, thermo, screening=screening, weak_rates=weak_rates)
     if progress is not None:
         _rhs = f
@@ -529,6 +540,8 @@ def evolve_zone(network: Network, zone: Zone, times: Sequence[float], thermo: Op
         try:
             from scipy.integrate import solve_ivp
             kwargs = dict(method=_SCIPY_METHODS[method_l], rtol=rtol, atol=atol)
+            if first_step is not None:
+                kwargs["first_step"] = first_step
             if use_jacobian and method_l in {"bdf", "radau"}:
                 mode = str(jac_mode).lower()
                 if mode == "sparsity":
@@ -577,7 +590,8 @@ def _adaptive_implicit_euler(network: Network, species: Sequence[str], y0: np.nd
                              newton_tol: float = 1e-7, max_newton: int = 12,
                              jac_every: int = 4, max_growth: float = 1.5,
                              max_rejections: int = 200,
-                             progress: Optional[Callable[[float], None]] = None) -> EvolutionResult:
+                             progress: Optional[Callable[[float], None]] = None,
+                             first_step: Optional[float] = None) -> EvolutionResult:
     """Implicit Euler steps with Newton-Raphson iterations and step control.
 
     Each step solves ``y - y_old - h f(t + h, y) = 0`` by Newton iterations
@@ -632,7 +646,7 @@ def _adaptive_implicit_euler(network: Network, species: Sequence[str], y0: np.nd
     out = np.zeros((len(ts), len(species)))
     out[0] = y
     t = float(ts[0])
-    dt = 1.0e-3 * float(ts[1] - ts[0])
+    dt = float(first_step) if first_step else 1.0e-3 * float(ts[1] - ts[0])
     steps = rejected = nfev = njev = 0
     in_a_row = 0
     jm, jm_age = None, 0

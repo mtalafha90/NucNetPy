@@ -61,6 +61,33 @@ assert result.success, result.message
 temperature and density history drops straight in;
 `nucnetpy.hydro.Trajectory` wraps a tabulated one with interpolation.
 
+### Conditions from the zone file
+
+A NucNet Tools zone file carries the conditions of its calculation as
+properties: the temperature (`t9` or `t9_0`), the density (`rho` or
+`rho_0`), the end time (`tend`) and the first time step (`dt`). The zone
+reads them:
+
+```python
+zone = net.zone(0)
+result = nn.evolve_zone(
+    net, zone, nn.time_grid(0.0, zone.end_time(), 100),
+    thermo=nn.constant_thermo(zone.temperature9(), zone.density()),
+    first_step=zone.time_step(), method="adaptive_implicit_euler",
+)
+```
+
+`nucnetpy evolve-zone` does the same for every one of them that is not given
+as an option (`--t9`, `--rho`, `--t1`, `--dt`), and says on standard error
+which value it uses and where it came from. Without either, the end time is
+1 s and the integrator chooses its first step. The temperature and the density
+have no default: without them the command stops with a message rather than
+compute a plausible but meaningless composition.
+
+`dt` is only the first step. Both integrators choose every later step
+themselves, from the tolerances or from `max_change`; the output times,
+`--steps` and `--log-time`, do not limit them.
+
 Supported methods are `bdf`, `radau`, `lsoda`, `rk45` and `dop853`, which
 call SciPy; `adaptive_implicit_euler`; and the fixed-step `rk4`, `euler` and
 `implicit_euler` fallbacks. Reaction networks are stiff, so `bdf`, `radau`,
