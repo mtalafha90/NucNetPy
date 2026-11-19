@@ -281,8 +281,14 @@ zone.optional_properties  # {'tend': '3.15e07', 'dt': '1.e-5', ...}
 
 Code that reads `zone.properties.get("t9_0", 0.2)` therefore takes the default
 without complaining, and the run proceeds at the wrong temperature. Consult
-both, as `Zone.temperature9()` and `Zone.density()` do, or read
-`optional_properties` directly. `examples/run_single_zone.py` shows the pattern.
+both, as `Zone.temperature9()`, `Zone.density()`, `Zone.end_time()` and
+`Zone.time_step()` do, or read `optional_properties` directly.
+
+`nucnetpy evolve-zone` takes the temperature, density, end time and first
+step from the zone's `t9` (or `t9_0`), `rho` (or `rho_0`), `tend` and `dt`
+whenever `--t9`, `--rho`, `--t1` or `--dt` is left out, as NucNet Tools does,
+and says on standard error which values it uses and where they came from. It
+refuses to run without a temperature or a density.
 
 ---
 
