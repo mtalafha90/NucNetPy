@@ -109,18 +109,28 @@ nucnetpy evolve-zone combined_network.xml --t9 2 --rho 1e6 --t1 1 \
     --method adaptive_implicit_euler --max-change 0.05 --min-mass-fraction 1e-10
 ```
 
-On that network this integrates the full second in under a minute
-and passes the conservation check. With `--max-change` 0.02 and 0.01 the
-hydrogen and helium abundances change by less than 0.2 per cent, so 0.05 is
-accurate enough there; make the same check on your own case. BDF with
-`--atol 1e-12` also reached the end, but positivity projection had created
-$10^{-3}$ of the initial baryon number, so NucNetPy rejected the run. In
-Python, pass `method`, `max_change` and `min_mass_fraction` to `evolve_zone`.
+On that network this integrates the full second in about 20 s and passes the
+conservation check. On a complete REACLIB network of 8087 nuclides and 81402
+reactions it takes about five minutes, in 4626 steps, and passes it too. With
+`--max-change` 0.02 and 0.01 the hydrogen and helium abundances change by less
+than 0.2 per cent, so 0.05 is accurate enough there; make the same check on
+your own case. BDF with `--atol 1e-12` also reached the end on the smaller
+network, but positivity projection had created $10^{-3}$ of the initial baryon
+number, so NucNetPy rejected the run. In Python, pass `method`, `max_change`
+and `min_mass_fraction` to `evolve_zone`.
+
+The first steps are short, about $10^{-13}$ s, while the fastest proton
+captures run their course; they then grow, so the time reached climbs by orders
+of magnitude between progress reports. Most of the cost of a step in a network
+this size is the factorisation of the Newton matrix. The integrator factorises
+it with diagonal pivots, which keep the fill-reducing ordering and make each
+factorisation several times faster than SuperLU's default pivoting.
 
 Above 1000 species, the command says up front how long one evaluation of the
 right-hand side takes. It reports how far it has got every 30 s on standard
-error (`--progress`), and at its first report it suggests these settings if
-the integration has covered almost none of the requested time.
+error (`--progress`). If two successive reports find the integration crawling,
+with the time reached growing by less than a factor of three, it suggests what
+to change, without repeating settings already in use.
 
 Cutting the network with `--zmax` and `--amax` also helps; it keeps the
 reactions among the retained nuclides, the weak decays and photodisintegrations
