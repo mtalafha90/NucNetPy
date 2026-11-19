@@ -88,6 +88,50 @@ compute a plausible but meaningless composition.
 themselves, from the tolerances or from `max_change`; the output times,
 `--steps` and `--log-time`, do not limit them.
 
+### What a run reports and saves
+
+`evolve_zone` calls its `progress` argument after every accepted step with the
+time reached, whatever the method, and `result.steps` counts the steps. The
+command line uses it to report, every 30 s (`--progress`), the time reached,
+the number of steps, the size of the last one and the output times done:
+
+```text
+evolve-zone: t = 1.25e-05 s of 1 s | step 2335, dt = 4e-07 s | 0 of 49 output times | after 2 min 30 s
+```
+
+A step that stays tiny for many reports is the sign of a stiff network that
+needs the step control of the adaptive implicit Euler scheme (see
+{doc}`pitfalls`). When the run ends, `nucnetpy evolve-zone` prints a summary:
+whether it succeeded, the steps and evaluations it took, how much the sum of the
+mass fractions changed (it should not change), `Ye`, and the ten largest mass
+fractions.
+
+Every run also saves its history, in a new folder named after the date and
+time (`--output FOLDER` names it, `--no-output` saves nothing). `output.xml`
+there holds one zone per output time, labelled from 0 for the start, with the
+time, `t9` and `rho` as properties and the mass fractions, in the libnucnet
+format that NucNet Tools writes. A run never overwrites an earlier
+`output.xml`. The file can be read in three ways:
+
+```bash
+nucnetpy largest-x evolve-zone_2026-11-19_06-31-05/output.xml --zone-index -1
+nucnetpy species-history evolve-zone_2026-11-19_06-31-05/output.xml he4
+```
+
+```python
+history = nn.read_xml("evolve-zone_2026-11-19_06-31-05/output.xml")
+final = history.zones[-1]
+
+import wnutils.xml as wx               # Webnucleo's own reader
+x = wx.Xml("evolve-zone_2026-11-19_06-31-05/output.xml")
+time = x.get_properties_as_floats(["time"])["time"]
+he4 = x.get_mass_fractions(["he4"])["he4"]
+```
+
+In Python, `nn.write_evolution_xml(net, result, "output.xml", thermo=thermo)`
+writes the same file from any evolution; `min_abundance` leaves the smallest
+abundances out, which keeps the file of a large network small.
+
 Supported methods are `bdf`, `radau`, `lsoda`, `rk45` and `dop853`, which
 call SciPy; `adaptive_implicit_euler`; and the fixed-step `rk4`, `euler` and
 `implicit_euler` fallbacks. Reaction networks are stiff, so `bdf`, `radau`,

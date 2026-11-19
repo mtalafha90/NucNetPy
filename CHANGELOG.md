@@ -31,6 +31,14 @@ covers all versions and resolves to the latest.
   does, and reports on standard error which values it uses and where they
   came from. It refuses to run without a temperature or a density, which it
   used to take as 1 without a word; the end time still defaults to 1 s.
+- `evolve-zone` ends with a short summary instead of the final abundance of
+  every species: the verdict, the steps and evaluations, the change in the
+  sum of the mass fractions, `Ye` and the ten largest mass fractions. Its
+  progress reports give the number of steps and the size of the last one.
+- `evolve_zone` calls `progress` after every accepted step, whatever the
+  method, instead of on every right-hand-side evaluation for the SciPy
+  methods, and `EvolutionResult.steps` counts the steps of every method. The
+  results do not change.
 - Every command has a one-line description in `nucnetpy --help`.
 - The documentation describes the package as it is; the history of each
   release is kept here.
@@ -42,6 +50,14 @@ covers all versions and resolves to the latest.
 - `Zone.end_time()`, `Zone.time_step()` and `Zone.find_property()`.
 - `evolve-zone --max-change` and `--min-mass-fraction`, the step control of
   the adaptive implicit Euler integrator.
+- `evolve-zone` saves the whole history of every run, in a new folder named
+  after the date and time: `output.xml` holds one zone per output time, with
+  its time, `t9` and `rho`, in the libnucnet format of NucNet Tools, which
+  wnutils and the `nucnetpy` zone commands read. `--output` names the folder,
+  `--no-output` saves nothing, and `--min-abundance` leaves the smallest
+  abundances out. A run never overwrites an earlier `output.xml`.
+- `write_evolution_xml(network, result, path, thermo=...)` writes that file
+  from any evolution.
 - `validation/benchmark_performance.py` integrates every network size, with
   BDF and with adaptive implicit Euler, and stops each integration after
   `--evolve-timeout` seconds; `--fd-limit` bounds the size up to which it

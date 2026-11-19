@@ -39,7 +39,8 @@ positional arguments:
     reactions-latex     write the reactions and their Q values as a LaTeX
                         table
     species-history     list the abundance of one species in every zone
-    evolve-zone         integrate a zone in time at constant T9 and rho
+    evolve-zone         integrate a zone in time at constant T9 and rho, and
+                        save its history
     energy-generation   print the nuclear energy generation rate of a zone, in
                         erg/g/s
     net-dot             write the network as a Graphviz DOT graph
@@ -387,13 +388,14 @@ options:
 usage: nucnetpy evolve-zone [-h] [--zone-index ZONE_INDEX] [--t0 T0] [--t1 T1]
                             [--steps STEPS] [--t9 T9] [--rho RHO] [--dt DT]
                             [--method {bdf,radau,lsoda,rk45,dop853,adaptive_implicit_euler,rk4,euler,implicit_euler,backward_euler}]
-                            [--log-time] [--min-abundance MIN_ABUNDANCE]
-                            [--zmax ZMAX] [--amax AMAX] [--rtol RTOL]
-                            [--atol ATOL] [--max-change FRACTION]
-                            [--min-mass-fraction X] [--progress SECONDS]
+                            [--log-time] [--min-abundance Y] [--zmax ZMAX]
+                            [--amax AMAX] [--rtol RTOL] [--atol ATOL]
+                            [--max-change FRACTION] [--min-mass-fraction X]
+                            [--progress SECONDS]
+                            [--output FOLDER | --no-output]
                             xml
 
-integrate a zone in time at constant T9 and rho
+integrate a zone in time at constant T9 and rho, and save its history
 
 positional arguments:
   xml                   network XML file
@@ -413,7 +415,8 @@ options:
                         property; without either, the integrator chooses)
   --method {bdf,radau,lsoda,rk45,dop853,adaptive_implicit_euler,rk4,euler,implicit_euler,backward_euler}
   --log-time
-  --min-abundance MIN_ABUNDANCE
+  --min-abundance Y     leave out of the saved file the abundances smaller
+                        than Y (default 0: every positive abundance is saved)
   --zmax ZMAX           keep only nuclides with Z <= ZMAX, and the reactions
                         among them
   --amax AMAX           keep only nuclides with A <= AMAX, and the reactions
@@ -433,6 +436,11 @@ options:
                         1e-15)
   --progress SECONDS    report progress on standard error every SECONDS of
                         computing time (default 30; 0 turns it off)
+  --output FOLDER       folder to save the results in, as output.xml: one zone
+                        per output time, in the libnucnet format of NucNet
+                        Tools (default: a new folder evolve-zone_DATE_TIME in
+                        the current directory)
+  --no-output           save nothing; only print the summary
 ```
 
 ## `energy-generation`

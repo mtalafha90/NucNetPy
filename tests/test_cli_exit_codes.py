@@ -5,18 +5,27 @@ success flag has been checked. The command line has to follow that advice
 itself: a failed solve still carries a full abundance vector, so printing the
 numbers without the verdict makes a diverged run look like an ordinary one.
 """
+import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
+import nucnetpy
 from nucnetpy import Network, Reaction, Species, Zone
 from nucnetpy.io.xml import write_xml
 
+#: The folder that holds the package under test, so that the command run in
+#: another working directory imports the same code.
+PACKAGE_PARENT = str(Path(nucnetpy.__file__).resolve().parent.parent)
+
 
 def run(*argv, cwd=None):
+    path = os.pathsep.join(p for p in (PACKAGE_PARENT, os.environ.get("PYTHONPATH")) if p)
     return subprocess.run([sys.executable, "-m", "nucnetpy.cli", *argv],
-                          capture_output=True, text=True, timeout=300, cwd=cwd)
+                          capture_output=True, text=True, timeout=300, cwd=cwd,
+                          env=dict(os.environ, PYTHONPATH=path))
 
 
 @pytest.fixture
@@ -46,27 +55,28 @@ def working_network(tmp_path):
     return path
 
 
-def test_failed_evolution_exits_non_zero(failing_network):
+def test_failed_evolution_exits_non_zero(failing_network, tmp_path):
     proc = run("evolve-zone", str(failing_network), "--t9", "1.0",
-               "--rho", "1e8", "--t0", "0", "--t1", "1e6", "--steps", "5")
+               "--rho", "1e8", "--t0", "0", "--t1", "1e6", "--steps", "5", cwd=tmp_path)
     assert proc.returncode != 0, (
         "a failed evolution exited 0; a diverged run is indistinguishable "
         "from a successful one at the command line")
 
 
-def test_failed_evolution_reports_the_failure(failing_network):
+def test_failed_evolution_reports_the_failure(failing_network, tmp_path):
     proc = run("evolve-zone", str(failing_network), "--t9", "1.0",
-               "--rho", "1e8", "--t0", "0", "--t1", "1e6", "--steps", "5")
-    assert "success False" in proc.stdout
+               "--rho", "1e8", "--t0", "0", "--t1", "1e6", "--steps", "5", cwd=tmp_path)
+    assert proc.stdout.startswith("evolve-zone: finished in")
+    assert proc.stdout.splitlines()[0].endswith("FAILED")
     assert proc.stderr.strip(), "no diagnostic was written to stderr"
 
 
-def test_successful_evolution_exits_zero_and_prints_abundances(working_network):
+def test_successful_evolution_exits_zero_and_prints_a_summary(working_network, tmp_path):
     proc = run("evolve-zone", str(working_network), "--t9", "1.0",
-               "--rho", "1e6", "--t0", "0", "--t1", "1.0", "--steps", "20")
+               "--rho", "1e6", "--t0", "0", "--t1", "1.0", "--steps", "20", cwd=tmp_path)
     assert proc.returncode == 0, proc.stderr
-    assert "success True" in proc.stdout
-    assert "he4" in proc.stdout
+    assert proc.stdout.splitlines()[0].endswith("success")
+    assert "he4" in proc.stdout and "saved: evolve-zone_" in proc.stdout
 
 
 def test_nse_reports_status_and_exit_code(working_network):
