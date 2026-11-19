@@ -198,9 +198,14 @@ LARGE_NETWORK = 1000
 #: advances slowly.
 EXPLOSIVE_STEP_CONTROL = "--method adaptive_implicit_euler --max-change 0.05 --min-mass-fraction 1e-10"
 
-#: ``evolve-zone`` gives its advice when, at its first progress report, the
-#: integration has covered less than this fraction of the requested time.
+#: ``evolve-zone`` gives its advice when, at a progress report after the
+#: first, the integration has covered less than ``SLOW_FRACTION`` of the
+#: requested time and the time it has reached grew by less than
+#: ``SLOW_GROWTH`` since the previous report.  An integration getting through
+#: a fast transient takes steps that grow geometrically, and passes this test;
+#: one held to a fixed tiny step does not.
 SLOW_FRACTION = 1.0e-6
+SLOW_GROWTH = 3.0
 
 
 def _duration(seconds: float) -> str:
@@ -219,8 +224,8 @@ class _Progress:
 
     Called with the time the integrator has reached; prints at most once per
     ``interval`` seconds of computing time, so a short run prints nothing.
-    If the first report finds that the integration has covered almost none
-    of the requested time, it also says what to try instead.
+    If two successive reports find the integration crawling (see
+    ``SLOW_FRACTION``), it also says what to try instead, once.
     """
 
     def __init__(self, times, interval: float, args=None):
@@ -230,6 +235,7 @@ class _Progress:
         self.args = args
         self.start = self.last = time.perf_counter()
         self.reached = float(times[0])
+        self.previous = None
         self.advised = False
 
     def __call__(self, t: float) -> None:
@@ -244,23 +250,30 @@ class _Progress:
         print(f"evolve-zone: reached t = {self.reached:.4g} s of {self.times[-1]:.4g} s "
               f"({done} of {len(self.times) - 1} output times) after "
               f"{_duration(now - self.start)}", file=sys.stderr, flush=True)
-        if not self.advised:
+        covered = self.reached - float(self.times[0])
+        span = float(self.times[-1]) - float(self.times[0])
+        if (not self.advised and self.previous is not None and span > 0
+                and covered < SLOW_FRACTION * span and covered < SLOW_GROWTH * self.previous):
             self.advised = True
-            span = float(self.times[-1]) - float(self.times[0])
-            if span > 0 and (self.reached - float(self.times[0])) < SLOW_FRACTION * span:
-                print(f"evolve-zone: hint: {_advice(self.args)}", file=sys.stderr, flush=True)
+            print(f"evolve-zone: hint: {_advice(self.args)}", file=sys.stderr, flush=True)
+        self.previous = covered
 
 
 def _advice(args) -> str:
     """What to try when an integration advances too slowly to finish."""
-    method = getattr(args, "method", "bdf")
-    if method == "adaptive_implicit_euler":
-        return ("at this rate the integration will not finish. Larger steps need a "
-                "larger --max-change (0.05 is usually accurate enough) and a larger "
-                "--min-mass-fraction (1e-10), or cut the network with --zmax and --amax.")
-    return ("at this rate the integration will not finish. Explosive burning makes "
-            f"the network very stiff; try {EXPLOSIVE_STEP_CONTROL}, or cut the "
-            "network with --zmax and --amax.")
+    cut = "cut the network to the nuclides the burning reaches with --zmax and --amax"
+    if getattr(args, "method", "bdf") != "adaptive_implicit_euler":
+        return ("the integration is advancing too slowly to finish. Explosive burning "
+                f"makes the network very stiff; try {EXPLOSIVE_STEP_CONTROL}, or {cut}.")
+    looser = []
+    if getattr(args, "max_change", 0.05) < 0.05:
+        looser.append("--max-change 0.05")
+    if getattr(args, "min_mass_fraction", 1e-10) < 1e-10:
+        looser.append("--min-mass-fraction 1e-10")
+    if looser:
+        return ("the integration is advancing too slowly to finish. Larger steps need "
+                f"{' and '.join(looser)}, or {cut}.")
+    return f"the integration is advancing too slowly to finish; {cut}."
 
 
 def _warn_if_large(n, z, thermo) -> None:
@@ -274,9 +287,13 @@ def _warn_if_large(n, z, thermo) -> None:
         return
     f = rhs(n, species, thermo)
     y0 = np.array([z.get_abundance(s) for s in species])
-    t0 = time.perf_counter()
-    f(0.0, y0)
-    one = time.perf_counter() - t0
+    f(0.0, y0)  # the first call also evaluates the rate parts that depend on T9 alone
+    samples = []
+    for _ in range(3):
+        t0 = time.perf_counter()
+        f(0.0, y0)
+        samples.append(time.perf_counter() - t0)
+    one = sorted(samples)[1]
     print(f"evolve-zone: note: the network has {len(species)} species and "
           f"{len(n.reactions.reactions)} reactions; one evaluation of the "
           f"right-hand side takes {one:.2g} s here. A stiff integration needs "

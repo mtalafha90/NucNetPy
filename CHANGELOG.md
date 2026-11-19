@@ -16,9 +16,15 @@ covers all versions and resolves to the latest.
   test machine every number of the demonstration record and of the archived
   reference case is the same to the last digit.
 - `jacobian_sparsity` builds the pattern as a sparse matrix from the start.
+- The adaptive implicit Euler integrator factorises its Newton matrix with
+  diagonal pivots, which keep the fill-reducing ordering: on a complete
+  REACLIB network each factorisation is 2 to 6 times faster, and a hydrogen-rich
+  zone at T9 = 2 and rho = 1e6 g/cm^3 integrates for a full second in about
+  five minutes. The results are those of threshold pivoting to rounding error.
 - `evolve-zone` reports the cost of one right-hand side above 1000 species,
-  and suggests settings that get through explosive burning when an
-  integration advances too slowly to finish.
+  and suggests settings that get through explosive burning when two
+  successive progress reports find an integration crawling. It does not
+  repeat settings already in use.
 - Every command has a one-line description in `nucnetpy --help`.
 - The documentation describes the package as it is; the history of each
   release is kept here.

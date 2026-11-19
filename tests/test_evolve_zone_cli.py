@@ -111,4 +111,27 @@ def test_an_integration_that_advances_gets_no_advice(capsys):
     args = cli.build_parser().parse_args(SHORT)
     progress = cli._Progress(time_grid(0.0, 1.0, 5), 0.0, args)
     progress(0.3)
+    progress(0.4)
     assert "hint" not in capsys.readouterr().err
+
+
+def test_a_transient_whose_steps_grow_gets_no_advice(capsys):
+    # Far from the end, but the reached time grows geometrically: the
+    # integration is getting through a fast transient, not crawling.
+    args = cli.build_parser().parse_args(SHORT + ["--method", "adaptive_implicit_euler"])
+    progress = cli._Progress(time_grid(0.0, 1.0, 5), 0.0, args)
+    for t in (1e-13, 1e-11, 1e-9):
+        progress(t)
+    assert "hint" not in capsys.readouterr().err
+
+
+def test_advice_does_not_repeat_the_settings_in_use(capsys):
+    args = cli.build_parser().parse_args(SHORT + ["--method", "adaptive_implicit_euler",
+                                                  "--max-change", "0.05",
+                                                  "--min-mass-fraction", "1e-10"])
+    progress = cli._Progress(time_grid(0.0, 1.0, 5), 0.0, args)
+    progress(1e-12)
+    progress(2e-12)
+    err = capsys.readouterr().err
+    assert "hint:" in err and "--zmax" in err
+    assert "--max-change" not in err and "--min-mass-fraction" not in err

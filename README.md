@@ -324,10 +324,11 @@ nucnetpy evolve-zone combined_network.xml --t9 2 --rho 1e6 --t1 1 \
 ```
 
 On a 900-species network from hydrogen to nickel this integrates the full
-second in under a minute and passes the conservation check. Halving
-`--max-change` changes the hydrogen and helium abundances by less than 0.2 per
-cent, which is the check to make on your own case. `evolve-zone` suggests these
-settings itself when an integration advances too slowly to finish.
+second in about 20 s, and on a complete REACLIB network of 8,087 nuclides and
+81,402 reactions in about five minutes; both runs pass the conservation check.
+Halving `--max-change` changes the hydrogen and helium abundances by less than
+0.2 per cent, which is the check to make on your own case. `evolve-zone`
+suggests these settings itself when an integration crawls.
 
 ---
 
