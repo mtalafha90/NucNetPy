@@ -39,3 +39,17 @@ jobs:
         run: |
           python docs/manual/generate_cli_reference.py
           git diff --exit-code docs/manual/reference/cli.md
+
+  oldest-supported:
+    # The oldest Python, NumPy and SciPy that pyproject.toml accepts, so that
+    # the minimum versions it states stay true.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+      - name: Install the oldest supported versions
+        run: python -m pip install -e ".[dev]" "numpy==1.22.4" "scipy==1.12.0"
+      - name: Test
+        run: python -m pytest
