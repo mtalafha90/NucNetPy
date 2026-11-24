@@ -39,6 +39,12 @@ covers all versions and resolves to the latest.
   method, instead of on every right-hand-side evaluation for the SciPy
   methods, and `EvolutionResult.steps` counts the steps of every method. The
   results do not change.
+- SciPy 1.12 or later is required, and NumPy 1.22.4 or later. With SciPy 1.9
+  to 1.11 the Radau integrator crawls on a stiff network: on the test network
+  it reaches 3e-12 s in 140,000 right-hand-side evaluations, where SciPy 1.12
+  and later integrate the whole second in 1345. A new continuous-integration job runs
+  the tests with Python 3.10, NumPy 1.22.4 and SciPy 1.12.0, the oldest
+  versions the package accepts.
 - Every command has a one-line description in `nucnetpy --help`.
 - The documentation describes the package as it is; the history of each
   release is kept here.

@@ -32,7 +32,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Astronomy",
     "Topic :: Scientific/Engineering :: Physics",
 ]
-dependencies = ["numpy>=1.22", "scipy>=1.9"]
+dependencies = ["numpy>=1.22.4", "scipy>=1.12"]
 
 [project.urls]
 Homepage = "https://github.com/mtalafha90/NucNetPy"

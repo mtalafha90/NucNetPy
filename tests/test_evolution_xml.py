@@ -27,11 +27,14 @@ from nucnetpy import (
 GOLDEN = str(Path(__file__).parent / "golden" / "golden_network.xml")
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def run():
+    # The package's own integrator, so that the run does not depend on how a
+    # given SciPy release takes its BDF steps; its accuracy does not matter here.
     net = read_xml(GOLDEN)
     thermo = constant_thermo(1.0, 1.0e5)
-    result = evolve_zone(net, net.zone(0), time_grid(0.0, 1.0, 5), thermo=thermo)
+    result = evolve_zone(net, net.zone(0), time_grid(0.0, 1.0, 5), thermo=thermo,
+                         method="adaptive_implicit_euler", max_change=0.05)
     assert result.success
     return net, thermo, result
 
